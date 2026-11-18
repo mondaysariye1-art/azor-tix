@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { eventOwned, getAppUser, isStaff } from '@/access/appAccess'
 
 export const TicketTypes: CollectionConfig = {
@@ -46,8 +47,45 @@ export const TicketTypes: CollectionConfig = {
           overrideAccess: false,
           user: req.user,
           depth: 0,
+          draft: true,
         })
         return data
+      },
+    ],
+    afterChange: [
+      async ({ doc, req }) => {
+        revalidateTag('public-events', { expire: 0 })
+        const eventId = typeof doc.event === 'object' ? doc.event?.id : doc.event
+        if (eventId) {
+          const event = await req.payload
+            .findByID({ collection: 'events', id: eventId, overrideAccess: true, draft: true, depth: 0 })
+            .catch(() => null)
+          if (event?.slug) {
+            revalidateTag(`event:${event.slug}`, { expire: 0 })
+            revalidatePath(`/events/${event.slug}`)
+          }
+        }
+        revalidatePath('/')
+        revalidatePath('/discover')
+        return doc
+      },
+    ],
+    afterDelete: [
+      async ({ doc, req }) => {
+        revalidateTag('public-events', { expire: 0 })
+        const eventId = typeof doc.event === 'object' ? doc.event?.id : doc.event
+        if (eventId) {
+          const event = await req.payload
+            .findByID({ collection: 'events', id: eventId, overrideAccess: true, draft: true, depth: 0 })
+            .catch(() => null)
+          if (event?.slug) {
+            revalidateTag(`event:${event.slug}`, { expire: 0 })
+            revalidatePath(`/events/${event.slug}`)
+          }
+        }
+        revalidatePath('/')
+        revalidatePath('/discover')
+        return doc
       },
     ],
   },

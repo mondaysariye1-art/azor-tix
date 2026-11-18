@@ -72,15 +72,39 @@
 }
 .brand-logo {
   display: block;
-  width: 154px;
+  width: 162px;
+  height: 50px;
   flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--coral);
 }
 .brand-logo img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
+  object-position: 54% 52%;
+  transform: scale(1.48);
+  transform-origin: 54% 52%;
 }
-.brand-logo-light img {
-  filter: invert(1);
+.brand-logo-light {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.brand-logo-white {
+  display: block;
+  width: 170px;
+  height: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.brand-logo-white img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  transform: none;
 }
 .header nav {
   display: flex;
@@ -1612,6 +1636,7 @@ footer {
 }
 .auth-page > .brand-logo {
   width: 190px;
+  height: 58px;
   margin: 0 auto 46px;
 }
 .auth-card {
@@ -1661,6 +1686,40 @@ footer {
 .dashboard-form textarea:focus {
   border-color: var(--coral);
 }
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-field input {
+  padding-right: 84px;
+}
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--ink);
+  background: var(--cream);
+  border-color: var(--line);
+  outline: none;
+}
 .auth-card .terms {
   display: flex;
   align-items: center;
@@ -1677,31 +1736,66 @@ footer {
   color: var(--muted);
   font-size: 11px;
 }
+.account-type-block {
+  display: grid;
+  gap: 8px;
+}
+.account-type-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .account-type-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 5px;
+  gap: 8px;
+  padding: 6px;
   background: var(--cream);
+  border: 1px solid var(--line);
 }
 .account-type-switch button {
-  min-height: 46px;
+  min-height: 58px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 2px;
+  text-align: left;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--ink);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.account-type-switch button strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+.account-type-switch button span {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
 }
 .account-type-switch button.active {
   border-color: var(--ink);
   background: var(--ink);
   color: white;
+  box-shadow: 0 2px 0 var(--coral);
+}
+.account-type-switch button.active span {
+  color: var(--coral);
+}
+.account-fields-group {
+  display: grid;
+  gap: 18px;
 }
 .auth-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
+}
+.auth-grid.two-col {
+  grid-template-columns: 1fr 1fr;
 }
 .optional {
   color: var(--muted);
@@ -2356,9 +2450,81 @@ footer {
   border: 0;
   background: none;
   color: var(--coral);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
+}
+.table-action.muted-action {
+  color: var(--muted);
+}
+.table-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.table-subtext {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.event-url-cell code,
+.event-url-code {
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink);
+  word-break: break-all;
+}
+.event-link-banner {
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: white;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--coral);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.event-link-banner strong {
+  display: block;
+  font-size: 18px;
+  margin: 4px 0 8px;
+}
+.event-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.draft-url-note {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.wizard-publish-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.status-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--cream);
+  color: var(--ink);
+}
+.status-pill.status-published {
+  background: var(--coral);
+  color: var(--ink);
 }
 .ticket-link-list {
   width: min(560px, 100%);

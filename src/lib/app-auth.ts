@@ -15,12 +15,33 @@ export async function getCurrentAppUser() {
   return user
 }
 
-export function sessionCookieOptions(maxAge = 60 * 60 * 24 * 7) {
+export function isHttpsRequest(request: Request): boolean {
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  if (forwardedProto) {
+    return forwardedProto.split(',')[0].trim().toLowerCase() === 'https'
+  }
+  const origin = request.headers.get('origin') || request.headers.get('referer')
+  if (origin) {
+    try {
+      return new URL(origin).protocol === 'https:'
+    } catch {
+      // Ignore malformed origin or referer headers
+    }
+  }
+  try {
+    return new URL(request.url).protocol === 'https:'
+  } catch {
+    return Boolean(process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://'))
+  }
+}
+
+export function sessionCookieOptions(maxAge = 60 * 60 * 24 * 7, secure?: boolean) {
+  const isSecure = secure ?? Boolean(process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://'))
   return {
     httpOnly: true,
     maxAge,
     path: '/',
-    sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax',
+    secure: isSecure,
   }
 }

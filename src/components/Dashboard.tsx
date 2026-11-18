@@ -10,6 +10,30 @@ export default function Dashboard({ data, user }: { data: any; user: any }) {
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  async function copyEventUrl(id: string, slug: string) {
+    if (!slug) return
+    const url = `${window.location.origin}/events/${slug}`
+    await navigator.clipboard?.writeText(url).catch(() => {})
+    setCopiedId(id)
+    setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 2000)
+  }
+
+  async function togglePublish(eventId: string, shouldPublish: boolean) {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    const body = new FormData()
+    body.set('eventId', eventId)
+    body.set('publish', shouldPublish ? 'true' : 'false')
+    const response = await fetch('/api/dashboard/event-settings', { method: 'POST', body })
+    const result = await response.json()
+    setBusy(false)
+    if (!response.ok) return setError(result.error || 'Could not update event publication status.')
+    setNotice(result.message || 'Updated.')
+    window.location.reload()
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>, endpoint: string) {
     event.preventDefault()
@@ -33,14 +57,21 @@ export default function Dashboard({ data, user }: { data: any; user: any }) {
 
   const organizer = user.role === 'organizer'
   const superAdmin = user.role === 'super-admin'
+  const isOrganizationAccount = user.accountType === 'organization'
 
   return (
     <div className="dashboard">
       <aside className="dashboard-nav">
         <BrandLogo light />
         <div>
-          <span className="eyebrow">{user.role.replace('-', ' ')}</span>
-          <h2>{user.businessName || user.name}</h2>
+          <span className="eyebrow">
+            {organizer
+              ? isOrganizationAccount
+                ? 'Organization account'
+                : 'Individual account'
+              : user.role.replace('-', ' ')}
+          </span>
+          <h2>{isOrganizationAccount ? user.businessName || user.name : user.name}</h2>
           <p>{user.email}</p>
         </div>
         <nav>
@@ -130,53 +161,129 @@ export default function Dashboard({ data, user }: { data: any; user: any }) {
               <thead>
                 <tr>
                   <th>Event</th>
-                  <th>Venue</th>
+                  <th>Event URL</th>
                   <th>Date</th>
                   <th>Status</th>
-                  <th>Action</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {data.events.map((event: any) => (
-                  <tr key={event.id}>
-                    <td>{event.title}</td>
-                    <td>{event.venue}</td>
-                    <td>
-                      {event.startsAt
-                        ? new Date(event.startsAt).toLocaleDateString('en-NG')
-                        : 'Not set'}
-                    </td>
-                    <td>{event.reviewStatus || event._status}</td>
-                    <td>
-                      {organizer ? (
-                        <a
-                          className="table-action"
-                          href={`/dashboard/organizer/events/${event.id}/edit`}
-                        >
-                          Resume / edit
-                        </a>
-                      ) : event.reviewStatus === 'pending' ? (
-                        <form
-                          onSubmit={(formEvent) => submit(formEvent, '/api/dashboard/event-review')}
-                        >
-                          <input type="hidden" name="eventId" value={event.id} />
-                          <input
-                            name="reviewNote"
-                            aria-label="Review note"
-                            placeholder="Optional note"
-                          />
-                          <select name="decision">
-                            <option value="approved">Approve</option>
-                            <option value="rejected">Reject</option>
-                          </select>
-                          <button className="table-action">Apply</button>
-                        </form>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {data.events.map((event: any) => {
+                  const isPublished = event._status === 'published'
+                  const eventPath = event.slug ? `/events/${event.slug}` : ''
+                  const statusLabel = isPublished
+                    ? 'Published'
+                    : event.reviewStatus === 'pending'
+                      ? 'Pending review'
+                      : event.reviewStatus === 'rejected'
+                        ? 'Rejected'
+                        : 'Draft'
+
+                  return (
+                    <tr key={event.id}>
+                      <td>
+                        <strong>{event.title}</strong>
+                        <div className="table-subtext">{event.venue || 'Abuja'}</div>
+                      </td>
+                      <td>
+                        {eventPath ? (
+                          <div className="event-url-cell">
+                            <code>{eventPath}</code>
+                          </div>
+                        ) : (
+                          'Pending slug'
+                        )}
+                      </td>
+                      <td>
+                        {event.startsAt
+                          ? new Date(event.startsAt).toLocaleDateString('en-NG')
+                          : 'Not set'}
+                      </td>
+                      <td>
+                        <span className={`status-pill status-${statusLabel.toLowerCase().replace(/\s+/g, '-')}`}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td>
+                        {organizer ? (
+                          <div className="table-action-row">
+                            {event.slug && (
+                              <button
+                                type="button"
+                                className="table-action"
+                                onClick={() => copyEventUrl(String(event.id), String(event.slug))}
+                              >
+                                {copiedId === String(event.id) ? 'Copied!' : 'Copy Link'}
+                              </button>
+                            )}
+                            {isPublished && eventPath ? (
+                              <a
+                                className="table-action"
+                                href={eventPath}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                View Event
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                className="table-action"
+                                disabled={busy}
+                                onClick={() => togglePublish(String(event.id), true)}
+                              >
+                                Publish
+                              </button>
+                            )}
+                            {isPublished && (
+                              <button
+                                type="button"
+                                className="table-action muted-action"
+                                disabled={busy}
+                                onClick={() => togglePublish(String(event.id), false)}
+                              >
+                                Unpublish
+                              </button>
+                            )}
+                            <a
+                              className="table-action"
+                              href={`/dashboard/organizer/events/${event.id}/edit`}
+                            >
+                              Edit Event
+                            </a>
+                          </div>
+                        ) : event.reviewStatus === 'pending' ? (
+                          <form
+                            onSubmit={(formEvent) => submit(formEvent, '/api/dashboard/event-review')}
+                          >
+                            <input type="hidden" name="eventId" value={event.id} />
+                            <input
+                              name="reviewNote"
+                              aria-label="Review note"
+                              placeholder="Optional note"
+                            />
+                            <select name="decision">
+                              <option value="approved">Approve</option>
+                              <option value="rejected">Reject</option>
+                            </select>
+                            <button className="table-action">Apply</button>
+                          </form>
+                        ) : isPublished && eventPath ? (
+                          <a
+                            className="table-action"
+                            href={eventPath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View Event
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -786,6 +893,7 @@ export default function Dashboard({ data, user }: { data: any; user: any }) {
                   <tr>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Account type</th>
                     <th>Role</th>
                     <th>Status</th>
                     <th>Action</th>
@@ -794,8 +902,13 @@ export default function Dashboard({ data, user }: { data: any; user: any }) {
                 <tbody>
                   {data.users.map((account: any) => (
                     <tr key={account.id}>
-                      <td>{account.name}</td>
+                      <td>
+                        {account.accountType === 'organization'
+                          ? account.businessName || account.name
+                          : account.name}
+                      </td>
                       <td>{account.email}</td>
+                      <td>{account.accountType || 'individual'}</td>
                       <td>{account.role}</td>
                       <td>{account.accountStatus}</td>
                       <td>

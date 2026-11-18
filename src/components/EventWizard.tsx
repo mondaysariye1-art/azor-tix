@@ -51,10 +51,14 @@ export default function EventWizard({
 }) {
   const [step, setStep] = useState(Math.max(1, Number(initialEvent?.wizardStep) || 1))
   const [eventId, setEventId] = useState(initialEvent?.id || '')
+  const [eventSlug, setEventSlug] = useState<string>(initialEvent?.slug || '')
+  const [eventStatus, setEventStatus] = useState<string>(initialEvent?._status || 'draft')
+  const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [cover, setCover] = useState<File | null>(null)
+  const [hasExistingCover, setHasExistingCover] = useState(Boolean(initialEvent?.heroImage))
   const [gallery, setGallery] = useState<File[]>([])
   const [data, setData] = useState<any>({
     title: initialEvent?.title || '',
@@ -98,29 +102,57 @@ export default function EventWizard({
     [data.tickets],
   )
 
-  async function save(submit = false) {
+  const fullEventUrl =
+    eventSlug && typeof window !== 'undefined'
+      ? `${window.location.origin}/events/${eventSlug}`
+      : eventSlug
+        ? `/events/${eventSlug}`
+        : ''
+
+  async function copyEventLink() {
+    if (!fullEventUrl) return
+    const target = `${window.location.origin}/events/${eventSlug}`
+    await navigator.clipboard?.writeText(target).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function save(options: { submit?: boolean; publish?: boolean } = {}) {
+    const { submit = false, publish = false } = options
     setBusy(true)
     setError('')
     setNotice('')
     const form = new FormData()
-    form.set('payload', JSON.stringify({ ...data, eventId, step, submit }))
+    form.set('payload', JSON.stringify({ ...data, eventId, step, submit, publish }))
     if (cover) form.set('cover', cover)
     gallery.forEach((file) => form.append('gallery', file))
     const response = await fetch('/api/dashboard/event-wizard', { method: 'POST', body: form })
     const result = await response.json()
     setBusy(false)
-    if (!response.ok) return setError(result.error || 'The draft could not be saved.')
+    if (!response.ok) {
+      setError(result.error || 'The draft could not be saved.')
+      return false
+    }
     setEventId(result.eventId)
+    if (result.slug) setEventSlug(result.slug)
+    if (result.status) setEventStatus(result.status)
+    if (Array.isArray(result.tickets) && result.tickets.length > 0) {
+      setData((current: any) => ({ ...current, tickets: result.tickets }))
+    }
+    if (cover) setHasExistingCover(true)
     setCover(null)
     setGallery([])
     setNotice(result.message)
-    if (submit) window.location.assign('/dashboard/organizer#events')
+    if (publish && typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    return true
   }
 
   async function continueStep(event: FormEvent) {
     event.preventDefault()
-    await save(false)
-    if (step < 6) setStep((current) => current + 1)
+    const ok = await save({ publish: false, submit: false })
+    if (ok && step < 6) setStep((current) => current + 1)
   }
 
   function updateTicket(index: number, field: string, value: unknown) {
@@ -166,7 +198,7 @@ export default function EventWizard({
             type="button"
             className="button button-cream"
             disabled={busy}
-            onClick={() => save(false)}
+            onClick={() => save({ publish: false, submit: false })}
           >
             Save draft
           </button>
@@ -180,6 +212,39 @@ export default function EventWizard({
           </p>
         )}
         {notice && <p className="form-success">{notice}</p>}
+        {eventSlug && (
+          <div className="event-link-banner" data-testid="wizard-event-link-banner">
+            <div>
+              <span className="eyebrow">
+                {eventStatus === 'published' ? 'Published' : 'Draft'} · Event URL
+              </span>
+              <strong>{data.title || 'Untitled event'}</strong>
+              <code className="event-url-code">{fullEventUrl}</code>
+            </div>
+            <div className="event-link-actions">
+              <button type="button" className="button button-cream" onClick={copyEventLink}>
+                {copied ? 'Link copied!' : 'Copy Event Link'}
+              </button>
+              {eventStatus === 'published' ? (
+                <a
+                  className="button button-coral"
+                  href={`/events/${eventSlug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View Event
+                </a>
+              ) : (
+                <span className="draft-url-note">Publish to view live page</span>
+              )}
+              {eventId && (
+                <Link className="button button-dark" href={`/dashboard/organizer/events/${eventId}/edit`}>
+                  Edit Event
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
         <form className="wizard-form" onSubmit={continueStep}>
           {step === 1 && (
             <section className="wizard-card">
@@ -415,12 +480,12 @@ export default function EventWizard({
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    required={!initialEvent?.heroImage && !cover}
+                    required={!hasExistingCover && !cover}
                     onChange={(e) => setCover(e.target.files?.[0] || null)}
                   />
                   <span>
                     {cover?.name ||
-                      (initialEvent?.heroImage
+                      (hasExistingCover
                         ? 'Existing cover retained'
                         : 'JPG, PNG, or WebP · max 8 MB')}
                   </span>
@@ -793,20 +858,30 @@ export default function EventWizard({
                 />
               </label>
               <div className="approval-note">
-                <b>Approval workflow</b>
+                <b>Shareable event page & publishing</b>
                 <p>
-                  Submitting does not publish the event. AZOR TIX Admin or Super Admin must approve
-                  it first.
+                  Publish immediately to activate your unique event URL ({`/events/${eventSlug || '...'}`}),
+                  or save as a draft / submit for review. Draft events remain private until published.
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={busy}
-                className="button button-coral full"
-                onClick={() => save(true)}
-              >
-                {busy ? 'Submitting…' : 'Submit for approval'}
-              </button>
+              <div className="wizard-publish-actions">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="button button-coral full"
+                  onClick={() => save({ publish: true })}
+                >
+                  {busy ? 'Publishing…' : 'Publish event'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="button button-dark full"
+                  onClick={() => save({ submit: true })}
+                >
+                  {busy ? 'Submitting…' : 'Submit for staff review'}
+                </button>
+              </div>
             </section>
           )}
           <footer className="wizard-actions">

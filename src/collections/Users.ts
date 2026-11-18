@@ -41,6 +41,14 @@ export const Users: CollectionConfig = {
       required: true,
     },
     {
+      name: 'firstName',
+      type: 'text',
+    },
+    {
+      name: 'lastName',
+      type: 'text',
+    },
+    {
       name: 'role',
       type: 'select',
       required: true,
@@ -79,8 +87,12 @@ export const Users: CollectionConfig = {
     {
       name: 'accountType',
       type: 'select',
-      defaultValue: 'organization',
-      options: ['individual', 'organization'],
+      defaultValue: 'individual',
+      saveToJWT: true,
+      options: [
+        { label: 'Individual', value: 'individual' },
+        { label: 'Organization', value: 'organization' },
+      ],
     },
     { name: 'country', type: 'text' },
     { name: 'state', type: 'text' },

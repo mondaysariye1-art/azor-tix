@@ -1,8 +1,10 @@
 import path from 'path'
-import { buildFigmaConfig } from '@payloadcms/figma'
+import { buildConfig, type EmailAdapter } from 'payload'
+import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { mcpPlugin } from '@payloadcms/plugin-mcp'
 import { en as adminLanguage } from '@payloadcms/translations/languages/en'
 import { fileURLToPath } from 'url'
+import { inMemoryDatabaseAdapter } from './lib/in-memory-db'
 import { Admins } from './collections/Admins'
 import { Media } from './collections/Media'
 import { Folders } from './collections/Folders'
@@ -29,7 +31,6 @@ import {
   Transactions,
 } from './collections/Operations'
 import { PlatformSettings } from './globals/PlatformSettings'
-import type { EmailAdapter } from 'payload'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -77,7 +78,7 @@ const azorEmail: EmailAdapter = () => ({
   },
 })
 
-export default buildFigmaConfig({
+export default buildConfig({
   admin: {
     user: Admins.slug,
     constrainWidth: true,
@@ -120,6 +121,9 @@ export default buildFigmaConfig({
     Subscribers,
   ],
   globals: [PlatformSettings],
+  db: inMemoryDatabaseAdapter(),
+  editor: lexicalEditor(),
+  secret: process.env.PAYLOAD_SECRET || 'azor-tix-local-dev-secret',
   email: azorEmail,
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
@@ -130,5 +134,4 @@ export default buildFigmaConfig({
     defaultLocale: 'en',
   },
   plugins: [mcpPlugin({})],
-  figma: {},
 })

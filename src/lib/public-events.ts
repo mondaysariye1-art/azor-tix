@@ -1,5 +1,4 @@
 import 'server-only'
-import { unstable_cache } from 'next/cache'
 import { findBySlug, getPayloadClient } from '@/lib/payload'
 import type { EventItem } from '@/components/AzorSite'
 
@@ -34,18 +33,33 @@ async function normalizeEvents(docs: EventDocument[]): Promise<EventItem[]> {
         price: Number(ticket.price),
         maxPerOrder: Number(ticket.maxPerOrder || 8),
       }))
-      const startsAt = new Date(event.startsAt)
+      const rawStart = event.startsAt ? new Date(event.startsAt) : null
+      const startsAt =
+        rawStart && Number.isFinite(rawStart.valueOf()) ? rawStart : new Date(event.createdAt || Date.now())
+      const rawEnd = event.endsAt ? new Date(event.endsAt) : null
+      const endsAt = rawEnd && Number.isFinite(rawEnd.valueOf()) ? rawEnd : null
       const organizer = event.organizer as Related | string | number
       const image = event.heroImage as Related | string | number
 
+      const formattedDate = new Intl.DateTimeFormat('en-NG', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+        timeZone: 'Africa/Lagos',
+      }).format(startsAt)
+      const formattedTime = new Intl.DateTimeFormat('en-NG', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'Africa/Lagos',
+      }).format(startsAt)
+
       return {
-        id: String(event.slug),
+        id: String(event.slug || event.id),
+        slug: String(event.slug || event.id),
         title: String(event.title),
-        date: new Intl.DateTimeFormat('en-NG', {
-          dateStyle: 'full',
-          timeStyle: 'short',
-          timeZone: 'Africa/Lagos',
-        }).format(startsAt),
+        date: formattedDate,
+        formattedTime,
+        startsAtISO: startsAt.toISOString(),
+        endsAtISO: endsAt ? endsAt.toISOString() : undefined,
         shortDate: startsAt
           .toLocaleDateString('en-NG', {
             day: '2-digit',
@@ -54,15 +68,19 @@ async function normalizeEvents(docs: EventDocument[]): Promise<EventItem[]> {
           })
           .toUpperCase()
           .replace(',', ''),
-        location: String(event.venue),
+        location: String(event.venue || 'Abuja venue'),
+        address: event.address ? String(event.address) : undefined,
         city: 'Abuja',
         category: String(event.category),
+        eventFormat: event.eventFormat ? String(event.eventFormat) : 'physical',
+        virtualLink: event.virtualLink ? String(event.virtualLink) : undefined,
         price: Number(firstTicket?.price || 0),
         image: typeof image === 'object' && image?.url ? image.url : '/favicon.svg',
         host:
           typeof organizer === 'object'
             ? organizer.businessName || organizer.name || 'AZOR TIX organizer'
             : 'AZOR TIX organizer',
+        shortDescription: event.shortDescription ? String(event.shortDescription) : undefined,
         description: event.description ? String(event.description) : undefined,
         refundPolicy: event.refundPolicy ? String(event.refundPolicy) : undefined,
         attendeeQuestions: Array.isArray(event.attendeeQuestions)
@@ -82,43 +100,29 @@ async function normalizeEvents(docs: EventDocument[]): Promise<EventItem[]> {
   )
 }
 
-const getPublicEventsCached = unstable_cache(
-  async () => {
-    const payload = await getPayloadClient()
-    const result = await payload.find({
-      collection: 'events',
-      overrideAccess: false,
-      where: {
-        and: [
-          { _status: { equals: 'published' } },
-          {
-            or: [{ visibility: { equals: 'public' } }, { visibility: { exists: false } }],
-          },
-        ],
-      },
-      limit: 100,
-      sort: 'startsAt',
-      depth: 2,
-    })
-    return normalizeEvents(result.docs as EventDocument[])
-  },
-  ['public-events'],
-  { revalidate: 3600, tags: ['public-events'] },
-)
-
 export async function getPublicEvents() {
-  return getPublicEventsCached()
+  const payload = await getPayloadClient()
+  const result = await payload.find({
+    collection: 'events',
+    overrideAccess: false,
+    where: {
+      and: [
+        { _status: { equals: 'published' } },
+        {
+          or: [{ visibility: { equals: 'public' } }, { visibility: { exists: false } }],
+        },
+      ],
+    },
+    limit: 100,
+    sort: 'startsAt',
+    depth: 2,
+  })
+  return normalizeEvents(result.docs as EventDocument[])
 }
 
 export async function getPublicEvent(slug: string) {
-  return unstable_cache(
-    async () => {
-      const event = await findBySlug('events', slug, { depth: 2 })
-      if (!event) return null
-      const [normalized] = await normalizeEvents([event as EventDocument])
-      return normalized
-    },
-    ['public-event', slug],
-    { revalidate: 3600, tags: ['public-events', `event:${slug}`] },
-  )()
+  const event = await findBySlug('events', slug, { draft: false, depth: 2 })
+  if (!event || (event as EventDocument)._status !== 'published') return null
+  const [normalized] = await normalizeEvents([event as EventDocument])
+  return normalized
 }

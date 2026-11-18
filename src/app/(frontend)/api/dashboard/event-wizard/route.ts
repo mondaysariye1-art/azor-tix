@@ -111,6 +111,10 @@ export async function POST(request: Request) {
           .filter((session: any) => session.name && session.startsAt && session.endsAt)
       : []
 
+    const publish = Boolean(raw.publish)
+    const submitForReview = Boolean(raw.submit)
+    const wantsValidation = publish || submitForReview
+
     const data: Record<string, any> = {
       organizer: user.id,
       title,
@@ -149,18 +153,19 @@ export async function POST(request: Request) {
       refundPolicy: cleanText(raw.refundPolicy),
       capacity: Number(raw.capacity) > 0 ? Math.floor(Number(raw.capacity)) : undefined,
       wizardStep: step,
-      reviewStatus: raw.submit
-        ? 'pending'
-        : existing?.reviewStatus === 'pending'
+      reviewStatus: publish
+        ? 'approved'
+        : submitForReview
           ? 'pending'
-          : 'draft',
+          : existing?.reviewStatus || 'draft',
+      _status: publish ? 'published' : 'draft',
       ...(heroImage ? { heroImage } : {}),
       ...(gallery.length
         ? { gallery: [...(Array.isArray(existing?.gallery) ? existing.gallery : []), ...gallery] }
         : {}),
     }
 
-    if (raw.submit) {
+    if (wantsValidation) {
       const hasCover = Boolean(heroImage || existing?.heroImage)
       const startsAt = cleanDate(raw.startsAt)
       const endsAt = cleanDate(raw.endsAt)
@@ -183,7 +188,7 @@ export async function POST(request: Request) {
         return Response.json(
           {
             error:
-              'Complete all six steps, including cover, dates, venue, capacity, description, and refund policy.',
+              'Complete all six steps, including cover, dates, venue, capacity, description, ticket category, and refund policy.',
           },
           { status: 400 },
         )
@@ -196,18 +201,27 @@ export async function POST(request: Request) {
           id: existing.id,
           overrideAccess: false,
           user,
-          draft: true,
-          data,
+          draft: !publish,
+          data: data as any,
         })
-      : await payload.create({
-          collection: 'events',
-          overrideAccess: false,
-          user,
-          draft: true,
-          data,
-        })
+      : publish
+        ? await payload.create({
+            collection: 'events',
+            overrideAccess: false,
+            user,
+            draft: false,
+            data: data as any,
+          })
+        : await payload.create({
+            collection: 'events',
+            overrideAccess: false,
+            user,
+            draft: true,
+            data: data as any,
+          })
 
     const ticketInputs = Array.isArray(raw.tickets) ? raw.tickets.slice(0, 50) : []
+    const savedTickets: any[] = []
     for (const ticket of ticketInputs) {
       const name = cleanText(ticket.name, 120)
       const price = Number(ticket.price)
@@ -248,26 +262,44 @@ export async function POST(request: Request) {
         active: ticket.salesStatus !== 'paused',
       }
       if (ticket.id) {
-        await payload.update({
+        const updatedTicket = await payload.update({
           collection: 'ticket-types',
           id: ticket.id,
           overrideAccess: false,
           user,
           data: ticketData,
         })
+        savedTickets.push(updatedTicket)
       } else {
-        await payload.create({
+        const createdTicket = await payload.create({
           collection: 'ticket-types',
           overrideAccess: false,
           user,
           data: ticketData,
         })
+        savedTickets.push(createdTicket)
       }
     }
 
+    const eventUrl = event.slug ? `/events/${event.slug}` : undefined
     return Response.json({
       eventId: event.id,
-      message: raw.submit ? 'Event submitted for AZOR TIX approval.' : `Step ${step} saved.`,
+      slug: event.slug,
+      title: event.title,
+      status: event._status,
+      reviewStatus: event.reviewStatus,
+      eventUrl,
+      tickets: savedTickets.map((ticket: any) => ({
+        ...ticket,
+        salesOpenAt: ticket.salesOpenAt?.slice(0, 16) || '',
+        salesCloseAt: ticket.salesCloseAt?.slice(0, 16) || '',
+        perks: (ticket.perks || []).map((item: any) => item.perk),
+      })),
+      message: publish
+        ? 'Event published and live.'
+        : submitForReview
+          ? 'Event submitted for AZOR TIX approval.'
+          : `Step ${step} saved.`,
     })
   } catch (error) {
     return Response.json(

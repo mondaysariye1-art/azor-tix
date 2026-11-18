@@ -6,12 +6,6 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const phonePattern = /^\+?[0-9 ]{10,16}$/
 
 export async function POST(request: Request) {
-  if (!process.env.PAYSTACK_SECRET_KEY) {
-    return Response.json(
-      { error: 'Paystack is not configured yet. Add PAYSTACK_SECRET_KEY to enable sales.' },
-      { status: 503 },
-    )
-  }
   try {
     const body = await request.json()
     const eventSlug = typeof body.eventSlug === 'string' ? body.eventSlug : ''
@@ -134,6 +128,13 @@ export async function POST(request: Request) {
           : Math.min(grossSubtotal, Number(discount.value))
     }
     const amounts = calculateOrderAmounts(grossSubtotal, discountAmount)
+    if (amounts.total > 0 && !process.env.PAYSTACK_SECRET_KEY) {
+      return Response.json(
+        { error: 'Paystack is not configured yet. Add PAYSTACK_SECRET_KEY to enable paid sales.' },
+        { status: 503 },
+      )
+    }
+
     const reference = `AZT-${crypto.randomUUID()}`
     const order = await payload.create({
       collection: 'orders',
@@ -164,6 +165,34 @@ export async function POST(request: Request) {
         status: 'pending',
       },
     })
+
+    if (amounts.total === 0) {
+      await payload.create({
+        collection: 'transactions',
+        overrideAccess: true,
+        data: {
+          order: order.id,
+          event: event.id,
+          provider: 'paystack',
+          providerReference: reference,
+          amount: 0,
+          currency: 'NGN',
+          status: 'success',
+          verifiedAt: new Date().toISOString(),
+        },
+      })
+      const { finalizePaystackPayment } = await import('@/lib/payments')
+      await finalizePaystackPayment({
+        reference,
+        status: 'success',
+        currency: 'NGN',
+        amount: 0,
+      })
+      return Response.json({
+        authorizationURL: `/confirmation/${encodeURIComponent(reference)}`,
+      })
+    }
+
     await payload.create({
       collection: 'transactions',
       overrideAccess: true,
@@ -178,7 +207,16 @@ export async function POST(request: Request) {
       },
     })
 
-    const callbackURL = `${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/paystack/verify?reference=${encodeURIComponent(reference)}`
+    const requestOrigin = (() => {
+      const forwardedHost = request.headers.get('x-forwarded-host')
+      const host = forwardedHost || request.headers.get('host')
+      const proto =
+        request.headers.get('x-forwarded-proto')?.split(',')[0].trim() ||
+        (request.url.startsWith('https://') ? 'https' : 'http')
+      return host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_SITE_URL || ''
+    })()
+
+    const callbackURL = `${requestOrigin}/api/paystack/verify?reference=${encodeURIComponent(reference)}`
     const paystackResponse = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {

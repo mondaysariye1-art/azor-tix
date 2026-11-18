@@ -279,11 +279,6 @@ export interface UserAuthOperations {
  */
 export interface Admin {
   id: string;
-  figmaHandle?: string | null;
-  figmaImageUrl?: string | null;
-  userGroups?: string[] | null;
-  makePermission?: ('view' | 'edit') | null;
-  email?: string | null;
   createdBy?:
     | ({
         relationTo: 'admins';
@@ -304,6 +299,24 @@ export interface Admin {
       } | null);
   updatedAt: string;
   createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  resetPasswordRequestedAt?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+        refreshCount?: number | null;
+        refreshedAt?: string | null;
+      }[]
+    | null;
+  password?: string | null;
   collection: 'admins';
 }
 /**
@@ -382,8 +395,6 @@ export interface Media {
   alt: string;
   _h_folders?: (string | null) | Folder;
   _h_tags?: (string | Tag)[] | null;
-  prefix?: string | null;
-  _objectKey?: string | null;
   createdBy?:
     | ({
         relationTo: 'admins';
@@ -1344,15 +1355,27 @@ export interface PayloadLlmInstruction {
  * via the `definition` "admins_select".
  */
 export interface AdminsSelect<T extends boolean = true> {
-  figmaHandle?: T;
-  figmaImageUrl?: T;
-  userGroups?: T;
-  makePermission?: T;
-  email?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
   createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  resetPasswordRequestedAt?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+        refreshCount?: T;
+        refreshedAt?: T;
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1362,8 +1385,6 @@ export interface MediaSelect<T extends boolean = true> {
   alt?: T;
   _h_folders?: T;
   _h_tags?: T;
-  prefix?: T;
-  _objectKey?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;

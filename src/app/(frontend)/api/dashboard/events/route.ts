@@ -1,4 +1,5 @@
 import { getCurrentAppUser } from '@/lib/app-auth'
+import { generateUniqueEventSlug } from '@/lib/event-slugs'
 import { getPayloadClient } from '@/lib/payload'
 
 export async function POST(request: Request) {
@@ -61,15 +62,12 @@ export async function POST(request: Request) {
         size: image.size,
       },
     })
+    const publish = text('publish') === 'true'
+    const slug = await generateUniqueEventSlug(payload, title)
     const eventData = {
       organizer: user.id,
       title,
-      slug: title
-        .toLowerCase()
-        .normalize('NFKD')
-        .replace(/[^\w\s-]/g, '')
-        .trim()
-        .replace(/[\s_-]+/g, '-'),
+      slug,
       category: category as (typeof categories)[number],
       heroImage: media.id,
       description,
@@ -80,30 +78,30 @@ export async function POST(request: Request) {
       city: 'Abuja',
       capacity,
       checkInStatus: 'closed' as const,
+      reviewStatus: publish ? ('approved' as const) : ('draft' as const),
     }
-    const event =
-      text('publish') === 'true'
-        ? await payload.create({
-            collection: 'events',
-            overrideAccess: false,
-            user,
-            draft: false,
-            data: eventData,
-          })
-        : await payload.create({
-            collection: 'events',
-            overrideAccess: false,
-            user,
-            draft: true,
-            data: eventData,
-          })
+    const event = publish
+      ? await payload.create({
+          collection: 'events',
+          overrideAccess: false,
+          user,
+          draft: false,
+          data: eventData,
+        })
+      : await payload.create({
+          collection: 'events',
+          overrideAccess: false,
+          user,
+          draft: true,
+          data: eventData,
+        })
     await payload.create({
       collection: 'ticket-types',
       overrideAccess: false,
       user,
       data: {
         event: event.id,
-        name: text('ticketName'),
+        name: text('ticketName') || 'General admission',
         price: ticketPrice,
         quantity: ticketQuantity,
         maxPerOrder: 8,
@@ -111,9 +109,16 @@ export async function POST(request: Request) {
       },
     })
     return Response.json({
-      message: text('publish') === 'true' ? 'Event published.' : 'Event saved as a draft.',
+      eventId: event.id,
+      slug: event.slug,
+      eventUrl: event.slug ? `/events/${event.slug}` : undefined,
+      status: event._status,
+      message: publish ? 'Event published.' : 'Event saved as a draft.',
     })
-  } catch {
-    return Response.json({ error: 'The event could not be created.' }, { status: 400 })
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'The event could not be created.' },
+      { status: 400 },
+    )
   }
 }

@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       id: user.id,
       data: {
         name: text('contactName') || user.name,
-        businessName: displayName,
+        ...(user.accountType === 'organization' ? { businessName: displayName } : {}),
         phone,
         onboardingComplete: true,
       },

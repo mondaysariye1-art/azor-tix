@@ -8,15 +8,23 @@ import { BrandLogo } from './BrandLogo'
 
 export type EventItem = {
   id: string
+  slug?: string
   title: string
   date: string
+  formattedTime?: string
+  startsAtISO?: string
+  endsAtISO?: string
   shortDate: string
   location: string
+  address?: string
   city: string
   category: string
+  eventFormat?: string
+  virtualLink?: string
   price: number
   image: string
   host: string
+  shortDescription?: string
   description?: string
   refundPolicy?: string
   attendeeQuestions?: {
@@ -131,16 +139,16 @@ function LinkButton({
   )
 }
 
-function Logo({ light = false }: { light?: boolean }) {
-  return <BrandLogo light={light} />
+function Logo({ light = false, homepageWhite = false }: { light?: boolean; homepageWhite?: boolean }) {
+  return <BrandLogo light={light} variant={homepageWhite ? 'homepage-white' : 'default'} />
 }
 
-function Header({ dark = false }: { dark?: boolean }) {
+function Header({ dark = false, homepageWhite = false }: { dark?: boolean; homepageWhite?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <header className={`header ${dark ? 'header-dark' : ''}`}>
       <div className="nav-shell">
-        <Logo light={dark} />
+        <Logo light={dark} homepageWhite={homepageWhite} />
         <nav className={open ? 'nav-open' : ''}>
           <LinkButton to="/discover">Discover events</LinkButton>
           <LinkButton to="/organizers">For organizers</LinkButton>
@@ -262,7 +270,7 @@ function HomePage({ events }: { events: EventItem[] }) {
   return (
     <>
       <div className="home-hero-wrap">
-        <Header dark />
+        <Header dark homepageWhite />
         <section className="home-hero shell">
           <div className="eyebrow light">Your next story starts here</div>
           <h1>
@@ -446,7 +454,7 @@ function DiscoverPage({ events }: { events: EventItem[] }) {
           (category === 'All' || e.category === category) &&
           e.title.toLowerCase().includes(query.toLowerCase()),
       ),
-    [query, category],
+    [events, query, category],
   )
   return (
     <>
@@ -517,9 +525,13 @@ function EventPage({ event, events }: { event: EventItem; events: EventItem[] })
   const selectedTicket = ticketTypes.find((ticket) => ticket.id === ticketTypeId) || ticketTypes[0]
   const share = async () => {
     setShared(true)
-    if (navigator.share)
-      await navigator.share({ title: event.title, url: window.location.href }).catch(() => {})
-    else await navigator.clipboard?.writeText(window.location.href)
+    if (navigator.share) {
+      await navigator.share({ title: event.title, url: window.location.href }).catch(() => {
+        navigator.clipboard?.writeText(window.location.href)
+      })
+    } else {
+      await navigator.clipboard?.writeText(window.location.href)
+    }
     setTimeout(() => setShared(false), 1800)
   }
   return (
@@ -539,7 +551,7 @@ function EventPage({ event, events }: { event: EventItem; events: EventItem[] })
           <div className="event-copy">
             <div className="event-kicker">
               <span>{event.shortDate}</span>
-              <button onClick={share}>
+              <button type="button" onClick={share}>
                 <Icon name="share" size={18} /> {shared ? 'Link copied' : 'Share event'}
               </button>
             </div>
@@ -547,25 +559,33 @@ function EventPage({ event, events }: { event: EventItem; events: EventItem[] })
             <p className="hosted">
               Hosted by <strong>{event.host}</strong>
             </p>
+            {event.shortDescription && <p className="section-copy">{event.shortDescription}</p>}
             <div className="event-facts">
               <div>
                 <Icon name="calendar" />
                 <span>
                   <b>Date & time</b>
                   {event.date}
+                  {event.formattedTime ? ` · ${event.formattedTime} WAT` : ''}
                 </span>
               </div>
               <div>
                 <Icon name="pin" />
                 <span>
-                  <b>Location</b>
-                  {event.location}, {event.city}
-                  <a
-                    href={`https://maps.google.com/?q=${encodeURIComponent(event.location + ' ' + event.city)}`}
-                    target="_blank"
-                  >
-                    View map
-                  </a>
+                  <b>{event.eventFormat === 'virtual' ? 'Online event' : 'Location'}</b>
+                  {event.location}
+                  {event.address ? `, ${event.address}` : ''}, {event.city}
+                  {event.eventFormat !== 'virtual' && (
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(
+                        `${event.location} ${event.address || ''} ${event.city}`,
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View map
+                    </a>
+                  )}
                 </span>
               </div>
             </div>
@@ -799,8 +819,12 @@ function CheckoutPage({ event }: { event: EventItem }) {
             )}
             <button className="button button-dark full" type="submit" disabled={submitting}>
               {submitting
-                ? 'Connecting to Paystack…'
-                : `Pay ${formatMoney(ticketPrice * qty + fee)}`}
+                ? ticketPrice * qty + fee === 0
+                  ? 'Confirming ticket…'
+                  : 'Connecting to Paystack…'
+                : ticketPrice * qty + fee === 0
+                  ? 'Get free ticket'
+                  : `Pay ${formatMoney(ticketPrice * qty + fee)}`}
               {!submitting && <Icon name="arrow" />}
             </button>
           </form>

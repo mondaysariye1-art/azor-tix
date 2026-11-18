@@ -2,16 +2,20 @@
 
 import Link from 'next/link'
 import { FormEvent, useEffect, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 import { BrandLogo } from './BrandLogo'
 
 type Mode = 'forgot' | 'login' | 'register' | 'reset' | 'verify'
+type AccountType = 'individual' | 'organization'
 
 export default function AuthPanel({ mode, token }: { mode: Mode; token?: string }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(mode === 'verify')
-  const [accountType, setAccountType] = useState<'individual' | 'organization'>('individual')
+  const [accountType, setAccountType] = useState<AccountType>('individual')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   useEffect(() => {
     if (mode !== 'verify' || !token) return
@@ -29,36 +33,62 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
       .finally(() => setBusy(false))
   }, [mode, token])
 
+  function switchAccountType(nextType: AccountType) {
+    if (nextType === accountType) return
+    setAccountType(nextType)
+    setError('')
+    setMessage('')
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError('')
     setMessage('')
     const form = new FormData(event.currentTarget)
-    const body = Object.fromEntries(form.entries())
-    if (token) body.token = token
-    const response = await fetch(`/api/app-auth/${mode}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const result = await response.json()
-    setBusy(false)
-    if (!response.ok) {
-      setError(result.error || 'Please check your details and try again.')
-      return
+    const body: Record<string, any> = Object.fromEntries(form.entries())
+
+    if (mode === 'register') {
+      body.accountType = accountType
+      const password = String(body.password || '')
+      const confirmPassword = String(body.confirmPassword || '')
+      if (password.length < 12) {
+        setError('Password must be at least 12 characters long.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.')
+        return
+      }
     }
-    if (mode === 'login' || (mode === 'register' && result.role)) {
-      window.location.assign('/dashboard')
-      return
+
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/app-auth/${mode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const result = await response.json()
+      setBusy(false)
+      if (!response.ok) {
+        setError(result.error || 'Please check your details and try again.')
+        return
+      }
+      if (mode === 'login' || (mode === 'register' && result.role)) {
+        window.location.assign('/dashboard')
+        return
+      }
+      setMessage(result.message)
+    } catch {
+      setBusy(false)
+      setError('Unable to connect right now. Please try again.')
     }
-    setMessage(result.message)
   }
 
   const titles: Record<Mode, string> = {
     forgot: 'Reset your password',
     login: 'Welcome back',
-    register: 'Create your organizer account',
+    register: 'Create your account',
     reset: 'Choose a new password',
     verify: 'Verify your email',
   }
@@ -67,7 +97,13 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
     <main className="auth-page">
       <BrandLogo light />
       <section className="auth-card">
-        <span className="eyebrow">Organizer workspace</span>
+        <span className="eyebrow">
+          {mode === 'register'
+            ? accountType === 'organization'
+              ? 'Organization registration'
+              : 'Individual registration'
+            : 'Organizer workspace'}
+        </span>
         <h1>{titles[mode]}</h1>
         {mode === 'verify' ? (
           <div className="auth-status">
@@ -79,111 +115,216 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
           <form onSubmit={submit}>
             {mode === 'register' && (
               <>
-                <div className="account-type-switch" role="group" aria-label="Organizer type">
-                  <button
-                    type="button"
-                    className={accountType === 'individual' ? 'active' : ''}
-                    onClick={() => setAccountType('individual')}
-                  >
-                    Individual
-                  </button>
-                  <button
-                    type="button"
-                    className={accountType === 'organization' ? 'active' : ''}
-                    onClick={() => setAccountType('organization')}
-                  >
-                    Organization / Business
-                  </button>
+                <div className="account-type-block">
+                  <span className="account-type-label">Account type</span>
+                  <div className="account-type-switch" role="tablist" aria-label="Account type">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={accountType === 'individual'}
+                      data-testid="account-type-individual"
+                      className={accountType === 'individual' ? 'active' : ''}
+                      onClick={() => switchAccountType('individual')}
+                    >
+                      <strong>Individual</strong>
+                      <span>Personal account</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={accountType === 'organization'}
+                      data-testid="account-type-organization"
+                      className={accountType === 'organization' ? 'active' : ''}
+                      onClick={() => switchAccountType('organization')}
+                    >
+                      <strong>Organization</strong>
+                      <span>Company or brand</span>
+                    </button>
+                  </div>
                 </div>
                 <input type="hidden" name="accountType" value={accountType} />
-                <label>
-                  {accountType === 'organization' ? 'Contact name' : 'Full name'}
-                  <input name="name" required minLength={2} autoComplete="name" />
-                </label>
-                {accountType === 'organization' && (
-                  <>
+
+                {accountType === 'individual' ? (
+                  <div className="account-fields-group" key="individual-fields">
+                    <div className="auth-grid two-col">
+                      <label>
+                        First name
+                        <input
+                          name="firstName"
+                          required
+                          minLength={2}
+                          autoComplete="given-name"
+                          placeholder="Amara"
+                        />
+                      </label>
+                      <label>
+                        Last name
+                        <input
+                          name="lastName"
+                          required
+                          minLength={2}
+                          autoComplete="family-name"
+                          placeholder="Okafor"
+                        />
+                      </label>
+                    </div>
                     <label>
-                      Registered business name
-                      <input name="businessName" required minLength={2} />
+                      Email address
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        placeholder="amara@example.com"
+                      />
                     </label>
                     <label>
-                      CAC number <span className="optional">Optional</span>
-                      <input name="cacNumber" />
+                      Phone number
+                      <input
+                        name="phone"
+                        type="tel"
+                        required
+                        minLength={10}
+                        autoComplete="tel"
+                        placeholder="+234 800 000 0000"
+                      />
                     </label>
-                  </>
+                  </div>
+                ) : (
+                  <div className="account-fields-group" key="organization-fields">
+                    <label>
+                      Organization or company name
+                      <input
+                        name="businessName"
+                        required
+                        minLength={2}
+                        autoComplete="organization"
+                        placeholder="House of Waves Ltd"
+                      />
+                    </label>
+                    <label>
+                      Contact person’s full name
+                      <input
+                        name="name"
+                        required
+                        minLength={2}
+                        autoComplete="name"
+                        placeholder="Nana Eze"
+                      />
+                    </label>
+                    <label>
+                      Business email address
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        placeholder="events@houseofwaves.ng"
+                      />
+                    </label>
+                    <label>
+                      Phone number
+                      <input
+                        name="phone"
+                        type="tel"
+                        required
+                        minLength={10}
+                        autoComplete="tel"
+                        placeholder="+234 800 000 0000"
+                      />
+                    </label>
+                    <div className="auth-grid two-col">
+                      <label>
+                        CAC number <span className="optional">Optional</span>
+                        <input name="cacNumber" placeholder="RC 123456" />
+                      </label>
+                      <label>
+                        Website <span className="optional">Optional</span>
+                        <input name="website" type="url" placeholder="https://" />
+                      </label>
+                    </div>
+                  </div>
                 )}
-                <label>
-                  Phone number
-                  <input name="phone" type="tel" required minLength={10} autoComplete="tel" />
-                </label>
-                <div className="auth-grid">
-                  <label>
-                    Country
-                    <input name="country" required autoComplete="country-name" />
-                  </label>
-                  <label>
-                    State
-                    <input name="state" required autoComplete="address-level1" />
-                  </label>
-                  <label>
-                    City
-                    <input name="city" required autoComplete="address-level2" />
-                  </label>
-                </div>
-                {accountType === 'organization' && (
-                  <label>
-                    Business address
-                    <input
-                      name="businessAddress"
-                      required
-                      minLength={5}
-                      autoComplete="street-address"
-                    />
-                  </label>
-                )}
-                <label>
-                  Website <span className="optional">Optional</span>
-                  <input name="website" type="url" placeholder="https://" />
-                </label>
               </>
             )}
-            {(mode === 'login' || mode === 'register' || mode === 'forgot') && (
+
+            {(mode === 'login' || mode === 'forgot') && (
               <label>
-                {mode === 'register' && accountType === 'organization'
-                  ? 'Business email'
-                  : 'Email address'}
+                Email address
                 <input name="email" type="email" required autoComplete="email" />
               </label>
             )}
+
             {(mode === 'login' || mode === 'register' || mode === 'reset') && (
               <label>
                 {mode === 'reset' ? 'New password' : 'Password'}
-                <input
-                  name="password"
-                  type="password"
-                  required
-                  minLength={12}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                />
+                <div className="password-field">
+                  <input
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={mode === 'login' ? undefined : 12}
+                    placeholder={mode === 'login' ? 'Enter your password' : 'Minimum 12 characters'}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    data-testid="toggle-password"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={16} aria-hidden="true" />
+                    ) : (
+                      <Eye size={16} aria-hidden="true" />
+                    )}
+                    <span>{showPassword ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
               </label>
             )}
+
             {mode === 'register' && (
               <>
                 <label>
                   Confirm password
-                  <input
-                    name="confirmPassword"
-                    type="password"
-                    required
-                    minLength={12}
-                    autoComplete="new-password"
-                  />
+                  <div className="password-field">
+                    <input
+                      name="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      minLength={12}
+                      placeholder="Re-enter your password"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      data-testid="toggle-confirm-password"
+                      aria-label={
+                        showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'
+                      }
+                      aria-pressed={showConfirmPassword}
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff size={16} aria-hidden="true" />
+                      ) : (
+                        <Eye size={16} aria-hidden="true" />
+                      )}
+                      <span>{showConfirmPassword ? 'Hide' : 'Show'}</span>
+                    </button>
+                  </div>
                 </label>
                 <label className="terms">
-                  <input name="terms" type="checkbox" required /> I agree to the organizer terms.
+                  <input name="terms" type="checkbox" required /> I agree to the AZOR TIX organizer
+                  terms.
                 </label>
               </>
             )}
+
             {error && (
               <p className="form-error" role="alert">
                 {error}
@@ -191,7 +332,13 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
             )}
             {message && <p className="form-success">{message}</p>}
             <button className="button button-coral full" disabled={busy} type="submit">
-              {busy ? 'Please wait…' : titles[mode]}
+              {busy
+                ? 'Please wait…'
+                : mode === 'register'
+                  ? accountType === 'organization'
+                    ? 'Create organization account'
+                    : 'Create individual account'
+                  : titles[mode]}
             </button>
           </form>
         )}
