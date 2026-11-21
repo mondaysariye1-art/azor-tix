@@ -34,7 +34,11 @@ export async function getOrganizerPublishedEvents(owner: string) {
         collection: 'events',
         overrideAccess: false,
         where: {
-          and: [{ organizer: { equals: owner } }, { _status: { equals: 'published' } }],
+          and: [
+            { organizer: { equals: owner } },
+            { _status: { equals: 'published' } },
+            { reviewStatus: { equals: 'approved' } },
+          ],
         },
         limit: 50,
         depth: 1,

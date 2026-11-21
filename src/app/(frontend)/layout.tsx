@@ -5,11 +5,11 @@ import { BodyCustomCode, renderHeadCustomCode } from '@/lib/make-custom-code'
 import { makeSiteSettings, sanitizeHtmlAttribute } from '@/lib/make-site-settings'
 import './styles.css'
 
-const defaultTitle = 'AZOR TIX — Abuja events and tickets'
+const defaultTitle = 'AZORTIX — Abuja events and tickets'
 const title = makeSiteSettings.title ?? defaultTitle
 const description =
   makeSiteSettings.description ??
-  'Discover and book Abuja’s best events, or create and manage your own with AZOR TIX.'
+  'Discover and book Abuja’s best events, or create and manage your own with AZORTIX.'
 const favicon = makeSiteSettings.icons?.icon ?? '/favicon.svg'
 const socialImage = makeSiteSettings.openGraph?.image
 const googleAnalyticsId = sanitizeHtmlAttribute(makeSiteSettings.analytics?.googleAnalyticsId)

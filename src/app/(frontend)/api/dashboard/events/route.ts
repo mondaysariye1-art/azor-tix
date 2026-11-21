@@ -1,14 +1,26 @@
-import { getCurrentAppUser } from '@/lib/app-auth'
+import { requireActiveDashboardUser } from '@/lib/app-auth'
 import { generateUniqueEventSlug } from '@/lib/event-slugs'
 import { getPayloadClient } from '@/lib/payload'
 
 export async function POST(request: Request) {
-  const user = await getCurrentAppUser()
-  if (!user || user.role !== 'organizer')
-    return Response.json({ error: 'Organizer access required.' }, { status: 403 })
+  const auth = await requireActiveDashboardUser(['organizer'])
+  if (!auth.ok) {
+    return Response.json(
+      { error: auth.error, requirePasswordChange: auth.requirePasswordChange },
+      { status: auth.status },
+    )
+  }
+  const user = auth.user
   try {
     const form = await request.formData()
     const text = (name: string) => String(form.get(name) || '').trim()
+    const requestedReviewStatus = text('reviewStatus')
+    if (requestedReviewStatus === 'approved' || requestedReviewStatus === 'rejected') {
+      return Response.json(
+        { error: 'Only AZORTIX Admins and Super Admins can approve or reject events.' },
+        { status: 403 },
+      )
+    }
     const title = text('title')
     const description = text('description')
     const startsAt = new Date(text('startsAt'))
@@ -62,7 +74,8 @@ export async function POST(request: Request) {
         size: image.size,
       },
     })
-    const publish = text('publish') === 'true'
+    const saveAsDraft = text('draft') === 'true' && text('publish') !== 'true' && text('submit') !== 'true'
+    const reviewStatus = saveAsDraft ? ('draft' as const) : ('pending' as const)
     const slug = await generateUniqueEventSlug(payload, title)
     const eventData = {
       organizer: user.id,
@@ -73,28 +86,22 @@ export async function POST(request: Request) {
       description,
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),
+      timezone: 'Africa/Lagos',
       venue: text('venue'),
       address: text('address'),
       city: 'Abuja',
       capacity,
       checkInStatus: 'closed' as const,
-      reviewStatus: publish ? ('approved' as const) : ('draft' as const),
+      reviewStatus,
+      ...(reviewStatus === 'pending' ? { submittedAt: new Date().toISOString() } : {}),
     }
-    const event = publish
-      ? await payload.create({
-          collection: 'events',
-          overrideAccess: false,
-          user,
-          draft: false,
-          data: eventData,
-        })
-      : await payload.create({
-          collection: 'events',
-          overrideAccess: false,
-          user,
-          draft: true,
-          data: eventData,
-        })
+    const event = await payload.create({
+      collection: 'events',
+      overrideAccess: false,
+      user,
+      draft: true,
+      data: eventData,
+    })
     await payload.create({
       collection: 'ticket-types',
       overrideAccess: false,
@@ -113,7 +120,11 @@ export async function POST(request: Request) {
       slug: event.slug,
       eventUrl: event.slug ? `/events/${event.slug}` : undefined,
       status: event._status,
-      message: publish ? 'Event published.' : 'Event saved as a draft.',
+      reviewStatus: event.reviewStatus,
+      message:
+        reviewStatus === 'pending'
+          ? 'Event created with Pending Approval status. An AZORTIX Admin must approve it before it goes live.'
+          : 'Event saved as a draft.',
     })
   } catch (error) {
     return Response.json(

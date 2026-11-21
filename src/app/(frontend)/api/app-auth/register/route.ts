@@ -173,10 +173,32 @@ export async function POST(request: Request) {
       )
     }
 
+    const { sendTransactionalEmail } = await import('@/lib/email')
+    const { logAudit } = await import('@/lib/audit')
+    const emailResult = await sendTransactionalEmail({
+      payload,
+      to: email,
+      subject: 'Welcome to AZORTIX — Organizer Account Ready',
+      title: `Welcome to AZORTIX, ${displayName}`,
+      bodyHtml: `<p>Your ${accountType} organizer account is active on AZORTIX.</p><p>You can now create Abuja events, configure paid or free tickets (up to 10 free tickets per event), verify your settlement bank account, and publish live event URLs.</p>`,
+      text: `Welcome to AZORTIX, ${displayName}. Your ${accountType} organizer account is active.`,
+    })
+    await logAudit({
+      payload,
+      action: 'user.register',
+      category: 'auth',
+      actor: user as any,
+      targetCollection: 'users',
+      targetId: user.id,
+      summary: `${email} registered as ${accountType} organizer.`,
+      metadata: { emailSent: emailResult.sent },
+    })
+
     return Response.json({
-      message: `${accountType === 'organization' ? 'Organization' : 'Individual'} account created. Opening your organizer dashboard…`,
+      message: `${accountType === 'organization' ? 'Organization' : 'Individual'} account created successfully! Opening your organizer dashboard…`,
       role: 'organizer',
       accountType,
+      emailStatus: emailResult,
       user: {
         id: user.id,
         name,

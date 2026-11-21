@@ -1,5 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
-import { getAppUser, isStaff } from '@/access/appAccess'
+import { getAppUser, isStaff, staffFieldOnly } from '@/access/appAccess'
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { generateUniqueEventSlug } from '@/lib/event-slugs'
 
@@ -21,9 +21,14 @@ export const Events: CollectionConfig = {
       if (isStaff(user)) return true
       if (user)
         return {
-          or: [{ organizer: { equals: user.id } }, { _status: { equals: 'published' } }],
+          or: [
+            { organizer: { equals: user.id } },
+            { and: [{ _status: { equals: 'published' } }, { reviewStatus: { equals: 'approved' } }] },
+          ],
         } as Where
-      return { _status: { equals: 'published' } } as Where
+      return {
+        and: [{ _status: { equals: 'published' } }, { reviewStatus: { equals: 'approved' } }],
+      } as Where
     },
     update: ({ req }) => {
       const user = getAppUser(req.user)
@@ -60,7 +65,24 @@ export const Events: CollectionConfig = {
           } else if (!requestedSlug || requestedSlug === existingSlug) {
             data.slug = existingSlug
           } else {
-            data.slug = await generateUniqueEventSlug(req.payload, requestedSlug, originalDoc?.id)
+            const nextSlug = await generateUniqueEventSlug(
+              req.payload,
+              requestedSlug,
+              originalDoc?.id,
+            )
+            data.slug = nextSlug
+            if (nextSlug !== existingSlug) {
+              const prevList: Array<{ slug: string }> = Array.isArray(originalDoc?.previousSlugs)
+                ? originalDoc.previousSlugs
+                : []
+              const merged = [
+                ...prevList.filter(
+                  (item) => item?.slug && item.slug !== nextSlug && item.slug !== existingSlug,
+                ),
+                { slug: existingSlug },
+              ]
+              data.previousSlugs = merged
+            }
           }
         }
         return data
@@ -73,17 +95,47 @@ export const Events: CollectionConfig = {
           data.organizer = user.id
         }
         if (user && !isStaff(user)) {
-          if (data.reviewStatus && ['rejected', 'cancelled'].includes(data.reviewStatus)) {
-            throw new Error('Only AZOR TIX staff can reject or cancel an event.')
+          const isAlreadyApproved = operation === 'update' && originalDoc?.reviewStatus === 'approved'
+          if (data.reviewStatus === 'approved' && !isAlreadyApproved) {
+            throw new Error('Only AZORTIX Admins and Super Admins can approve events.')
           }
-          if (data.reviewStatus === 'pending') data.submittedAt = new Date().toISOString()
-          if (data._status === 'published') {
-            if (originalDoc?.reviewStatus === 'rejected' || originalDoc?.reviewStatus === 'cancelled') {
-              throw new Error('This event requires AZOR TIX staff approval before publishing.')
+          if (
+            data.reviewStatus &&
+            ['rejected', 'cancelled'].includes(data.reviewStatus) &&
+            data.reviewStatus !== originalDoc?.reviewStatus
+          ) {
+            throw new Error('Only AZORTIX Admins and Super Admins can reject or cancel events.')
+          }
+          if (operation === 'create') {
+            data._status = 'draft'
+            if (data.reviewStatus !== 'draft') {
+              data.reviewStatus = 'pending'
+              data.submittedAt = data.submittedAt || new Date().toISOString()
             }
-            if (data.reviewStatus !== 'pending') {
-              data.reviewStatus = 'approved'
+          } else if (!isAlreadyApproved) {
+            if (data._status === 'published') {
+              data.reviewStatus = 'pending'
+              data.submittedAt = new Date().toISOString()
             }
+            data._status = 'draft'
+          } else if (data.reviewStatus && data.reviewStatus !== 'approved') {
+            data.reviewStatus = 'approved'
+          }
+          if (data.reviewStatus === 'pending' && originalDoc?.reviewStatus !== 'pending') {
+            data.submittedAt = new Date().toISOString()
+          }
+        }
+        if (user && isStaff(user)) {
+          if (operation === 'create' && !data.reviewStatus) {
+            data.reviewStatus = 'pending'
+            data.submittedAt = data.submittedAt || new Date().toISOString()
+            data._status = 'draft'
+          }
+          if (data.reviewStatus === 'rejected' || data.reviewStatus === 'cancelled') {
+            data._status = 'draft'
+          }
+          if (data.reviewStatus !== 'approved') {
+            data._status = 'draft'
           }
         }
         data.country = 'Nigeria'
@@ -108,6 +160,11 @@ export const Events: CollectionConfig = {
         revalidatePath('/discover')
         if (previousDoc?.slug) revalidatePath(`/events/${previousDoc.slug}`)
         if (doc.slug) revalidatePath(`/events/${doc.slug}`)
+        if (Array.isArray(doc.previousSlugs)) {
+          for (const entry of doc.previousSlugs) {
+            if (entry?.slug) revalidatePath(`/events/${entry.slug}`)
+          }
+        }
         return doc
       },
     ],
@@ -138,6 +195,12 @@ export const Events: CollectionConfig = {
     },
     { name: 'title', type: 'text', required: true, index: true },
     { name: 'slug', type: 'slug', useAsSlug: 'title', unique: true, index: true },
+    {
+      name: 'previousSlugs',
+      type: 'array',
+      fields: [{ name: 'slug', type: 'text', required: true }],
+    },
+    { name: 'clientRequestId', type: 'text', index: true },
     {
       name: 'category',
       type: 'select',
@@ -178,6 +241,7 @@ export const Events: CollectionConfig = {
     },
     { name: 'startsAt', type: 'date', index: true },
     { name: 'endsAt', type: 'date' },
+    { name: 'timezone', type: 'text', defaultValue: 'Africa/Lagos' },
     { name: 'venue', type: 'text' },
     { name: 'address', type: 'text' },
     { name: 'country', type: 'text', defaultValue: 'Nigeria' },
@@ -252,14 +316,27 @@ export const Events: CollectionConfig = {
     {
       name: 'reviewStatus',
       type: 'select',
-      defaultValue: 'draft',
+      defaultValue: 'pending',
       options: ['draft', 'pending', 'approved', 'rejected', 'cancelled'],
       admin: { position: 'sidebar' },
     },
-    { name: 'reviewNote', type: 'textarea' },
+    {
+      name: 'reviewNote',
+      type: 'textarea',
+      access: { create: staffFieldOnly, update: staffFieldOnly },
+    },
     { name: 'submittedAt', type: 'date' },
-    { name: 'reviewedAt', type: 'date' },
-    { name: 'reviewedBy', type: 'relationship', relationTo: 'users' },
+    {
+      name: 'reviewedAt',
+      type: 'date',
+      access: { create: staffFieldOnly, update: staffFieldOnly },
+    },
+    {
+      name: 'reviewedBy',
+      type: 'relationship',
+      relationTo: 'users',
+      access: { create: staffFieldOnly, update: staffFieldOnly },
+    },
     { name: 'wizardStep', type: 'number', defaultValue: 1, min: 1, max: 6 },
   ],
 }

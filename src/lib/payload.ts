@@ -1,16 +1,59 @@
 import { getPayload } from "payload"
 import config from "@payload-config"
 import type { Config } from "@/payload-types"
+import { ensureSeededStaffAccounts } from "@/lib/seed-admins"
 
 type CollectionSlug = keyof Config["collections"]
+
+const RETRY_DELAYS_MS = [500, 1000, 2000, 3500, 5000]
+
+export function isTransientDbError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? `${error.message} ${String((error as any).cause?.message || '')} ${String(
+          (error as any).code || (error as any).cause?.code || '',
+        )}`
+      : String(error || '')
+  return /recovery mode|starting up|cannot connect to postgres|terminating connection|57P01|57P03|ECONNRESET|ECONNREFUSED|timeout exceeded|Connection terminated/i.test(
+    message,
+  )
+}
+
+const isTransientDbStartupError = isTransientDbError
+
+const globalForPayloadInit = globalThis as unknown as {
+  __azorPayloadInitPromise?: Promise<Awaited<ReturnType<typeof getPayload>>>
+}
 
 /**
  * Get the Payload instance configured for this project.
  * Use this in server components and route handlers.
  */
 export async function getPayloadClient() {
-  const payloadConfig = await config
-  return getPayload({ config: payloadConfig })
+  if (!globalForPayloadInit.__azorPayloadInitPromise) {
+    globalForPayloadInit.__azorPayloadInitPromise = (async () => {
+      const payloadConfig = await config
+      let lastError: unknown
+      for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+        try {
+          const payload = await getPayload({ config: payloadConfig })
+          await ensureSeededStaffAccounts(payload)
+          return payload
+        } catch (error) {
+          lastError = error
+          if (!isTransientDbStartupError(error) || attempt === RETRY_DELAYS_MS.length) {
+            throw error
+          }
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
+        }
+      }
+      throw lastError
+    })().catch((err) => {
+      globalForPayloadInit.__azorPayloadInitPromise = undefined
+      throw err
+    })
+  }
+  return globalForPayloadInit.__azorPayloadInitPromise
 }
 
 /**

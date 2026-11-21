@@ -112,6 +112,24 @@ function clone<T>(value: T): T {
   return structuredClone(value)
 }
 
+function applyUpdateData(existing: Doc, data: Doc): Doc {
+  const next: Doc = { ...existing }
+  for (const [key, value] of Object.entries(data || {})) {
+    if (key === '$inc' && value && typeof value === 'object') {
+      for (const [incKey, delta] of Object.entries(value)) {
+        const current = Number(next[incKey])
+        next[incKey] = (Number.isFinite(current) ? current : 0) + Number(delta || 0)
+      }
+    } else if (value && typeof value === 'object' && !Array.isArray(value) && '$inc' in value) {
+      const current = Number(next[key])
+      next[key] = (Number.isFinite(current) ? current : 0) + Number((value as any).$inc || 0)
+    } else {
+      next[key] = value
+    }
+  }
+  return next
+}
+
 function getCollectionMap(store: InMemoryStore, slug: string): Map<string, Doc> {
   let map = store.collections.get(slug)
   if (!map) {
@@ -318,9 +336,10 @@ function sortDocs(docs: Doc[], sort: string | string[] | undefined): Doc[] {
 function paginate<T>(allDocs: T[], limitArg?: number, pageArg?: number, pagination = true) {
   const totalDocs = allDocs.length
   const page = Math.max(1, pageArg ?? 1)
-  const effectiveLimit = !pagination || limitArg === 0 ? Math.max(totalDocs, 1) : (limitArg ?? 10)
-  const start = !pagination || limitArg === 0 ? 0 : (page - 1) * effectiveLimit
-  const docs = !pagination || limitArg === 0 ? allDocs : allDocs.slice(start, start + effectiveLimit)
+  const unlimited = limitArg === 0 || (!pagination && limitArg == null)
+  const effectiveLimit = unlimited ? Math.max(totalDocs, 1) : (limitArg ?? 10)
+  const start = unlimited ? 0 : (page - 1) * effectiveLimit
+  const docs = unlimited ? allDocs : allDocs.slice(start, start + effectiveLimit)
   const totalPages = effectiveLimit > 0 ? Math.max(1, Math.ceil(totalDocs / effectiveLimit)) : 1
   const hasPrevPage = page > 1
   const hasNextPage = page < totalPages
@@ -415,8 +434,7 @@ export function inMemoryDatabaseAdapter(): DatabaseAdapterObj {
           for (const [docId, existing] of map.entries()) {
             if (matchesWhere(existing, targetWhere, store, payload, collection)) {
               const updated = clone({
-                ...existing,
-                ...data,
+                ...applyUpdateData(existing, data),
                 id: existing.id,
                 updatedAt: new Date().toISOString(),
               })
@@ -440,8 +458,7 @@ export function inMemoryDatabaseAdapter(): DatabaseAdapterObj {
           const now = new Date().toISOString()
           for (const existing of matched) {
             const updated = clone({
-              ...existing,
-              ...data,
+              ...applyUpdateData(existing, data),
               id: existing.id,
               updatedAt: now,
             })
@@ -544,7 +561,7 @@ export function inMemoryDatabaseAdapter(): DatabaseAdapterObj {
         findVersions: async ({ collection, limit, page, pagination, sort, where }) => {
           syncStoreFromDisk(store)
           const list = getVersionList(store, collection)
-          const matched = list.filter((v) => matchesWhere(v, where, store, payload))
+          const matched = list.filter((v) => matchesWhere(v, where, store, payload, collection))
           const sorted = sortDocs(matched, sort || '-updatedAt').map((v) => clone(v))
           return paginate(sorted, limit, page, pagination) as any
         },
@@ -552,7 +569,9 @@ export function inMemoryDatabaseAdapter(): DatabaseAdapterObj {
         countVersions: async ({ collection, where }) => {
           syncStoreFromDisk(store)
           const list = getVersionList(store, collection)
-          const totalDocs = list.filter((v) => matchesWhere(v, where, store, payload)).length
+          const totalDocs = list.filter((v) =>
+            matchesWhere(v, where, store, payload, collection),
+          ).length
           return { totalDocs }
         },
 
@@ -615,7 +634,7 @@ export function inMemoryDatabaseAdapter(): DatabaseAdapterObj {
             const list = getVersionList(store, collection)
             store.versions.set(
               collection,
-              list.filter((v) => !matchesWhere(v, where, store, payload)),
+              list.filter((v) => !matchesWhere(v, where, store, payload, collection)),
             )
             persistStoreToDisk(store)
           } else if (globalSlug) {

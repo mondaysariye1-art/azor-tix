@@ -1,37 +1,47 @@
-import Image from 'next/image'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
+import { TicketConfirmationView } from '@/components/TicketConfirmationView'
 import { getPayloadClient } from '@/lib/payload'
+import { resolveTicketForCustomerView } from '@/lib/tickets'
+
+export const dynamic = 'force-dynamic'
+
+async function getRequestOrigin(): Promise<string | undefined> {
+  const hdrs = await headers()
+  const host = hdrs.get('x-forwarded-host') || hdrs.get('host')
+  if (!host) return undefined
+  const proto = hdrs.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
+  return `${proto}://${host}`
+}
 
 export default async function TicketPage({ params }: PageProps<'/tickets/[code]'>) {
   const { code } = await params
-  const payload = await getPayloadClient()
-  const result = await payload.find({
-    collection: 'tickets',
-    overrideAccess: true,
-    where: { code: { equals: code } },
-    limit: 1,
-    depth: 2,
-  })
-  const ticket = result.docs[0]
+  const [payload, origin] = await Promise.all([getPayloadClient(), getRequestOrigin()])
+  const ticket = await resolveTicketForCustomerView(payload, code, origin)
   if (!ticket) notFound()
-  const event = typeof ticket.event === 'object' ? ticket.event : null
-  const ticketType = typeof ticket.ticketType === 'object' ? ticket.ticketType : null
+
+  const variant =
+    ticket.acquisitionType === 'gift'
+      ? 'gift-recipient'
+      : ticket.acquisitionType === 'private-invitation' || ticket.acquisitionType === 'complimentary'
+        ? 'private-invitation'
+        : 'standard'
+
   return (
-    <main className="digital-ticket-page">
-      <section className="digital-ticket">
-        <span className="eyebrow">AZOR TIX · Abuja</span>
-        <h1>{event?.title || 'Event ticket'}</h1>
-        <p>{ticket.attendeeName}</p>
-        <p>{ticketType?.name}</p>
-        <Image
-          src={`/api/tickets/${ticket.code}/qr`}
-          alt={`QR ticket for ${ticket.attendeeName}`}
-          width={280}
-          height={280}
-        />
-        <strong className={`ticket-status status-${ticket.status}`}>{ticket.status}</strong>
-        <small>{ticket.code}</small>
-      </section>
-    </main>
+    <TicketConfirmationView
+      mode="single"
+      variant={variant}
+      buyerName={ticket.attendeeName}
+      senderName={ticket.purchaserName || undefined}
+      giftMessage={ticket.giftMessage || undefined}
+      eventName={ticket.eventName}
+      eventDate={ticket.eventDate}
+      eventTime={ticket.eventTime}
+      eventVenue={ticket.eventVenue}
+      peopleCovered={ticket.peopleCovered}
+      isFree={ticket.isFree}
+      orderReference={ticket.orderReference}
+      tickets={[ticket]}
+    />
   )
 }

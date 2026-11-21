@@ -1,5 +1,13 @@
 import Link from 'next/link'
-export default function PaymentErrorPage() {
+import { BackToDashboardButton } from '@/components/BackToDashboardButton'
+import { getCurrentAppUser } from '@/lib/app-auth'
+
+export const dynamic = 'force-dynamic'
+
+export default async function PaymentErrorPage() {
+  const user = await getCurrentAppUser()
+  const dashboardUrl = user ? `/dashboard/${user.role}` : null
+
   return (
     <main className="success shell">
       <span className="eyebrow">Payment incomplete</span>
@@ -10,9 +18,12 @@ export default function PaymentErrorPage() {
         No ticket was issued. If your account was debited, contact support with your Paystack
         reference.
       </p>
-      <Link className="button button-dark" href="/discover">
-        Return to events
-      </Link>
+      <div className="success-actions">
+        <Link className="button button-dark" href="/discover">
+          Return to events
+        </Link>
+        <BackToDashboardButton dashboardUrl={dashboardUrl} className="button button-cream" />
+      </div>
     </main>
   )
 }

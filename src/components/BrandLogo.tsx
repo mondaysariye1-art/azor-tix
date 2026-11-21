@@ -13,11 +13,11 @@ export function BrandLogo({
       <Link
         href="/"
         className="brand-logo brand-logo-white"
-        aria-label="AZOR TIX home"
+        aria-label="AZORTIX home"
       >
         <Image
           src="/assets/azor-tix-wordmark-white.png"
-          alt="AZOR TIX — Ticketing made easy"
+          alt="AZORTIX — Ticketing made easy"
           width={642}
           height={214}
           priority
@@ -30,11 +30,11 @@ export function BrandLogo({
     <Link
       href="/"
       className={`brand-logo ${light ? 'brand-logo-light' : ''}`}
-      aria-label="AZOR TIX home"
+      aria-label="AZORTIX home"
     >
       <Image
         src="/assets/aistudio/image_2d960078.png"
-        alt="AZOR TIX — Ticketing made easy"
+        alt="AZORTIX — Ticketing made easy"
         width={1080}
         height={1080}
         priority

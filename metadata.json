@@ -1,0 +1,8 @@
+{
+  "name": "AZOR TIX",
+  "description": "Abuja live event discovery, ticketing, organizer studio, Paystack checkout & transfers, and QR check-in platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

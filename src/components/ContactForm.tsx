@@ -13,27 +13,27 @@ export default function ContactForm() {
     if (response.ok) form.reset()
   }
   return (
-    <form className="auth-card" onSubmit={submit}>
+    <form className="auth-card" onSubmit={submit} autoComplete="off">
       <span className="eyebrow">Support request</span>
       <label>
         Name
-        <input name="name" required minLength={2} />
+        <input name="name" required minLength={2} autoComplete="off" />
       </label>
       <label>
         Email
-        <input name="email" type="email" required />
+        <input name="email" type="email" required autoComplete="off" />
       </label>
       <label>
         Subject
-        <input name="subject" required minLength={4} />
+        <input name="subject" required minLength={4} autoComplete="off" />
       </label>
       <label>
         Order reference (optional)
-        <input name="orderReference" />
+        <input name="orderReference" autoComplete="off" />
       </label>
       <label>
         Message
-        <textarea name="message" required minLength={20} />
+        <textarea name="message" required minLength={20} autoComplete="off" />
       </label>
       {status && <p className="form-success">{status}</p>}
       <button className="button button-coral">Send request</button>

@@ -1,18 +1,15 @@
-import { getCurrentAppUser } from '@/lib/app-auth'
+import { requireActiveDashboardUser } from '@/lib/app-auth'
 import { getPayloadClient } from '@/lib/payload'
 
 const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
 
 export async function GET(request: Request) {
-  const user = await getCurrentAppUser()
-  if (!user) return new Response('Authentication required.', { status: 401 })
+  const auth = await requireActiveDashboardUser()
+  if (!auth.ok) return new Response(auth.error, { status: auth.status })
+  const user = auth.user
   const eventId = new URL(request.url).searchParams.get('event')
   const payload = await getPayloadClient()
-  const where: any = eventId
-    ? { event: { equals: eventId } }
-    : user.role === 'organizer'
-      ? { 'event.organizer': { equals: user.id } }
-      : {}
+  const where: any = eventId ? { event: { equals: eventId } } : {}
   const orders = await payload.find({
     collection: 'orders',
     overrideAccess: false,
@@ -26,6 +23,7 @@ export async function GET(request: Request) {
     [
       'Reference',
       'Event',
+      'Order Kind',
       'Customer',
       'Email',
       'Subtotal',
@@ -39,6 +37,7 @@ export async function GET(request: Request) {
     ...orders.docs.map((order: any) => [
       order.reference,
       typeof order.event === 'object' ? order.event.title : order.event,
+      order.orderKind || (Number(order.total || 0) === 0 ? 'free' : 'paid'),
       `${order.customer.firstName} ${order.customer.lastName}`,
       order.customer.email,
       order.subtotal,

@@ -69,15 +69,30 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
         body: JSON.stringify(body),
       })
       const result = await response.json()
-      setBusy(false)
       if (!response.ok) {
+        setBusy(false)
         setError(result.error || 'Please check your details and try again.')
         return
       }
-      if (mode === 'login' || (mode === 'register' && result.role)) {
-        window.location.assign('/dashboard')
+      if (mode === 'register' && result.role) {
+        setBusy(false)
+        setMessage(
+          result.message || 'Account created successfully! Opening your organizer dashboard…',
+        )
+        window.setTimeout(() => {
+          window.location.assign('/dashboard')
+        }, 1400)
         return
       }
+      if (mode === 'login') {
+        if (result.mustChangePassword) {
+          window.location.assign('/change-password')
+        } else {
+          window.location.assign('/dashboard')
+        }
+        return
+      }
+      setBusy(false)
       setMessage(result.message)
     } catch {
       setBusy(false)
@@ -112,7 +127,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
             {error && <p className="form-error">{error}</p>}
           </div>
         ) : (
-          <form onSubmit={submit}>
+          <form onSubmit={submit} autoComplete={mode === 'login' ? 'on' : 'off'}>
             {mode === 'register' && (
               <>
                 <div className="account-type-block">
@@ -153,7 +168,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                           name="firstName"
                           required
                           minLength={2}
-                          autoComplete="given-name"
+                          autoComplete="off"
                           placeholder="Amara"
                         />
                       </label>
@@ -163,7 +178,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                           name="lastName"
                           required
                           minLength={2}
-                          autoComplete="family-name"
+                          autoComplete="off"
                           placeholder="Okafor"
                         />
                       </label>
@@ -174,7 +189,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                         name="email"
                         type="email"
                         required
-                        autoComplete="email"
+                        autoComplete="off"
                         placeholder="amara@example.com"
                       />
                     </label>
@@ -185,7 +200,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                         type="tel"
                         required
                         minLength={10}
-                        autoComplete="tel"
+                        autoComplete="off"
                         placeholder="+234 800 000 0000"
                       />
                     </label>
@@ -198,7 +213,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                         name="businessName"
                         required
                         minLength={2}
-                        autoComplete="organization"
+                        autoComplete="off"
                         placeholder="House of Waves Ltd"
                       />
                     </label>
@@ -208,7 +223,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                         name="name"
                         required
                         minLength={2}
-                        autoComplete="name"
+                        autoComplete="off"
                         placeholder="Nana Eze"
                       />
                     </label>
@@ -218,7 +233,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                         name="email"
                         type="email"
                         required
-                        autoComplete="email"
+                        autoComplete="off"
                         placeholder="events@houseofwaves.ng"
                       />
                     </label>
@@ -229,18 +244,18 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                         type="tel"
                         required
                         minLength={10}
-                        autoComplete="tel"
+                        autoComplete="off"
                         placeholder="+234 800 000 0000"
                       />
                     </label>
                     <div className="auth-grid two-col">
                       <label>
                         CAC number <span className="optional">Optional</span>
-                        <input name="cacNumber" placeholder="RC 123456" />
+                        <input name="cacNumber" autoComplete="off" placeholder="RC 123456" />
                       </label>
                       <label>
                         Website <span className="optional">Optional</span>
-                        <input name="website" type="url" placeholder="https://" />
+                        <input name="website" type="url" autoComplete="off" placeholder="https://" />
                       </label>
                     </div>
                   </div>
@@ -251,7 +266,12 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
             {(mode === 'login' || mode === 'forgot') && (
               <label>
                 Email address
-                <input name="email" type="email" required autoComplete="email" />
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete={mode === 'login' ? 'email' : 'off'}
+                />
               </label>
             )}
 
@@ -319,7 +339,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
                   </div>
                 </label>
                 <label className="terms">
-                  <input name="terms" type="checkbox" required /> I agree to the AZOR TIX organizer
+                  <input name="terms" type="checkbox" required /> I agree to the AZORTIX organizer
                   terms.
                 </label>
               </>
@@ -350,7 +370,7 @@ export default function AuthPanel({ mode, token }: { mode: Mode; token?: string 
             </>
           )}
           {mode !== 'login' && <Link href="/login">Back to login</Link>}
-          <Link href="/">Back to AZOR TIX</Link>
+          <Link href="/">Back to AZORTIX</Link>
         </div>
       </section>
     </main>

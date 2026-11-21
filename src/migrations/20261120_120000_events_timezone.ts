@@ -1,0 +1,21 @@
+import { MigrateDownArgs, MigrateUpArgs, sql } from '@payloadcms/db-postgres'
+
+export async function up({ db }: MigrateUpArgs): Promise<void> {
+  await db.execute(sql`
+    ALTER TABLE "events"
+      ADD COLUMN IF NOT EXISTS "timezone" varchar DEFAULT 'Africa/Lagos';
+
+    ALTER TABLE "_events_v"
+      ADD COLUMN IF NOT EXISTS "version_timezone" varchar DEFAULT 'Africa/Lagos';
+  `)
+}
+
+export async function down({ db }: MigrateDownArgs): Promise<void> {
+  await db.execute(sql`
+    ALTER TABLE "events"
+      DROP COLUMN IF EXISTS "timezone";
+
+    ALTER TABLE "_events_v"
+      DROP COLUMN IF EXISTS "version_timezone";
+  `)
+}

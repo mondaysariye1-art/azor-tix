@@ -1,4 +1,4 @@
-import { getCurrentAppUser } from '@/lib/app-auth'
+import { requireActiveDashboardUser } from '@/lib/app-auth'
 import { getPayloadClient } from '@/lib/payload'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -11,10 +11,14 @@ const slugify = (value: string) =>
     .replace(/[\s_-]+/g, '-')
 
 export async function POST(request: Request) {
-  const user = await getCurrentAppUser()
-  if (!user || user.role !== 'organizer') {
-    return Response.json({ error: 'Organizer access required.' }, { status: 403 })
+  const auth = await requireActiveDashboardUser(['organizer'])
+  if (!auth.ok) {
+    return Response.json(
+      { error: auth.error, requirePasswordChange: auth.requirePasswordChange },
+      { status: auth.status },
+    )
   }
+  const user = auth.user
 
   try {
     const form = await request.formData()

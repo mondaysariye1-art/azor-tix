@@ -170,6 +170,8 @@ export interface Config {
     announcements: Announcement;
     'event-collections': EventCollection;
     'bank-verifications': BankVerification;
+    'bank-change-appeals': BankChangeAppeal;
+    'free-ticket-links': FreeTicketLink;
     orders: Order;
     transactions: Transaction;
     tickets: Ticket;
@@ -178,6 +180,7 @@ export interface Config {
     refunds: Refund;
     complaints: Complaint;
     subscribers: Subscriber;
+    'audit-logs': AuditLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -199,6 +202,8 @@ export interface Config {
     announcements: AnnouncementsSelect<false> | AnnouncementsSelect<true>;
     'event-collections': EventCollectionsSelect<false> | EventCollectionsSelect<true>;
     'bank-verifications': BankVerificationsSelect<false> | BankVerificationsSelect<true>;
+    'bank-change-appeals': BankChangeAppealsSelect<false> | BankChangeAppealsSelect<true>;
+    'free-ticket-links': FreeTicketLinksSelect<false> | FreeTicketLinksSelect<true>;
     orders: OrdersSelect<false> | OrdersSelect<true>;
     transactions: TransactionsSelect<false> | TransactionsSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
@@ -207,6 +212,7 @@ export interface Config {
     refunds: RefundsSelect<false> | RefundsSelect<true>;
     complaints: ComplaintsSelect<false> | ComplaintsSelect<true>;
     subscribers: SubscribersSelect<false> | SubscribersSelect<true>;
+    'audit-logs': AuditLogsSelect<false> | AuditLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -326,8 +332,12 @@ export interface Admin {
 export interface User {
   id: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   role: 'organizer' | 'admin' | 'super-admin';
   accountStatus: 'active' | 'suspended';
+  mustChangePassword?: boolean | null;
+  tokenVersion?: number | null;
   phone?: string | null;
   businessName?: string | null;
   accountType?: ('individual' | 'organization') | null;
@@ -509,6 +519,13 @@ export interface Event {
   organizer: string | User;
   title: string;
   slug: string;
+  previousSlugs?:
+    | {
+        slug: string;
+        id?: string | null;
+      }[]
+    | null;
+  clientRequestId?: string | null;
   category:
     | 'Music'
     | 'Festival'
@@ -606,6 +623,7 @@ export interface TicketType {
   id: string;
   event: string | Event;
   name: string;
+  ticketKind?: ('paid' | 'free') | null;
   description?: string | null;
   price: number;
   quantity: number;
@@ -835,8 +853,172 @@ export interface BankVerification {
   bankName: string;
   accountNumber: string;
   accountName: string;
+  locked?: boolean | null;
+  verificationProvider?: string | null;
   status?: ('pending' | 'verified' | 'rejected') | null;
   verifiedAt?: string | null;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "bank-change-appeals".
+ */
+export interface BankChangeAppeal {
+  id: string;
+  organizer: string | User;
+  currentBankName: string;
+  currentBankCode: string;
+  currentAccountNumber: string;
+  currentAccountName: string;
+  proposedBankName: string;
+  proposedBankCode: string;
+  proposedAccountNumber: string;
+  proposedAccountName: string;
+  verificationProvider?: string | null;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewEligibleAt: string;
+  reviewedBy?: (string | null) | User;
+  reviewedByRole?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  overriddenBy?: (string | null) | User;
+  auditHistory?:
+    | {
+        action: string;
+        actorEmail: string;
+        actorRole: string;
+        note?: string | null;
+        at: string;
+        id?: string | null;
+      }[]
+    | null;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "free-ticket-links".
+ */
+export interface FreeTicketLink {
+  id: string;
+  code: string;
+  event: string | Event;
+  ticketType?: (string | null) | TicketType;
+  organizer: string | User;
+  invitationType?: string | null;
+  categoryLabel?: string | null;
+  maxClaims?: number | null;
+  claimedCount?: number | null;
+  recipientName?: string | null;
+  recipientEmail?: string | null;
+  personalMessage?: string | null;
+  status: 'active' | 'claimed' | 'exhausted' | 'expired' | 'revoked';
+  expiresAt?: string | null;
+  claimedAt?: string | null;
+  claimedByName?: string | null;
+  claimedByEmail?: string | null;
+  ticket?: (string | null) | Ticket;
+  claims?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tickets".
+ */
+export interface Ticket {
+  id: string;
+  code: string;
+  issuanceKey?: string | null;
+  verificationTokenHash?: string | null;
+  verificationTokenCiphertext?: string | null;
+  order: string | Order;
+  event: string | Event;
+  ticketType?: (string | null) | TicketType;
+  ticketLabel?: string | null;
+  attendeeName: string;
+  attendeeEmail: string;
+  attendeePhone?: string | null;
+  acquisitionType?: string | null;
+  purchaserName?: string | null;
+  purchaserEmail?: string | null;
+  purchaserUser?: (string | null) | User;
+  giftMessage?: string | null;
+  peopleCovered?: number | null;
+  invitationLink?: (string | null) | FreeTicketLink;
+  emailDeliveryStatus?: string | null;
+  emailLastAttemptAt?: string | null;
+  emailLastError?: string | null;
+  emailAttempts?: number | null;
+  source?: ('purchase' | 'free-registration' | 'free-claim' | 'complimentary' | 'guest-list') | null;
+  status: 'valid' | 'used' | 'cancelled' | 'refunded' | 'void';
+  checkedInAt?: string | null;
+  checkedInBy?: (string | null) | User;
   createdBy?:
     | ({
         relationTo: 'admins';
@@ -873,7 +1055,7 @@ export interface Order {
     phone: string;
   };
   items: {
-    ticketType: string | TicketType;
+    ticketType?: (string | null) | TicketType;
     name: string;
     quantity: number;
     unitPrice: number;
@@ -896,6 +1078,21 @@ export interface Order {
       }[]
     | null;
   total: number;
+  orderKind?: ('paid' | 'free' | 'complimentary') | null;
+  purchaseMode?: string | null;
+  purchaserUser?: (string | null) | User;
+  giftRecipients?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  emailDeliveryStatus?: string | null;
+  emailLastError?: string | null;
+  emailAttempts?: number | null;
   status: 'pending' | 'paid' | 'failed' | 'refunded' | 'cancelled';
   paidAt?: string | null;
   createdBy?:
@@ -956,45 +1153,6 @@ export interface Transaction {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "tickets".
- */
-export interface Ticket {
-  id: string;
-  code: string;
-  issuanceKey?: string | null;
-  order: string | Order;
-  event: string | Event;
-  ticketType: string | TicketType;
-  attendeeName: string;
-  attendeeEmail: string;
-  attendeePhone?: string | null;
-  source?: ('purchase' | 'complimentary' | 'guest-list') | null;
-  status: 'valid' | 'used' | 'refunded' | 'void';
-  checkedInAt?: string | null;
-  checkedInBy?: (string | null) | User;
-  createdBy?:
-    | ({
-        relationTo: 'admins';
-        value: string | Admin;
-      } | null)
-    | ({
-        relationTo: 'users';
-        value: string | User;
-      } | null);
-  updatedBy?:
-    | ({
-        relationTo: 'admins';
-        value: string | Admin;
-      } | null)
-    | ({
-        relationTo: 'users';
-        value: string | User;
-      } | null);
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "team-memberships".
  */
 export interface TeamMembership {
@@ -1004,6 +1162,15 @@ export interface TeamMembership {
   name: string;
   role: 'manager' | 'check-in' | 'analyst' | 'finance';
   permissions?: ('events' | 'attendees' | 'check-in' | 'reports' | 'finance')[] | null;
+  assignedEvents?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   invitationStatus?: ('pending' | 'accepted' | 'revoked') | null;
   active: boolean;
   createdBy?:
@@ -1034,12 +1201,33 @@ export interface TeamMembership {
 export interface PayoutRequest {
   id: string;
   reference: string;
+  idempotencyKey?: string | null;
   organizer: string | User;
   event: string | Event;
   amount: number;
-  status: 'pending' | 'approved' | 'paid' | 'rejected';
+  status: 'pending' | 'processing' | 'approved' | 'paid' | 'failed' | 'rejected';
+  initiatedBy?: (string | null) | User;
+  initiatedByRole?: string | null;
   reviewedBy?: (string | null) | User;
   reviewNote?: string | null;
+  reason?: string | null;
+  bankName?: string | null;
+  bankCode?: string | null;
+  accountNumber?: string | null;
+  accountName?: string | null;
+  paystackRecipientCode?: string | null;
+  paystackTransferCode?: string | null;
+  paystackTransferReference?: string | null;
+  failureReason?: string | null;
+  providerPayload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   paidAt?: string | null;
   createdBy?:
     | ({
@@ -1074,6 +1262,11 @@ export interface Refund {
   amount: number;
   reason: string;
   status: 'pending' | 'processed' | 'failed';
+  initiatedBy?: (string | null) | User;
+  paystackRefundId?: string | null;
+  paystackStatus?: string | null;
+  failureReason?: string | null;
+  processedAt?: string | null;
   createdBy?:
     | ({
         relationTo: 'admins';
@@ -1137,6 +1330,50 @@ export interface Subscriber {
   id: string;
   email: string;
   status: 'subscribed' | 'unsubscribed';
+  createdBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedBy?:
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-logs".
+ */
+export interface AuditLog {
+  id: string;
+  action: string;
+  category: 'auth' | 'event' | 'ticket' | 'bank' | 'appeal' | 'user' | 'payout' | 'refund' | 'admin' | 'settings';
+  actor?: (string | null) | User;
+  actorEmail?: string | null;
+  actorRole?: string | null;
+  targetCollection?: string | null;
+  targetId?: string | null;
+  summary: string;
+  metadata?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   createdBy?:
     | ({
         relationTo: 'admins';
@@ -1235,6 +1472,14 @@ export interface PayloadLockedDocument {
         value: string | BankVerification;
       } | null)
     | ({
+        relationTo: 'bank-change-appeals';
+        value: string | BankChangeAppeal;
+      } | null)
+    | ({
+        relationTo: 'free-ticket-links';
+        value: string | FreeTicketLink;
+      } | null)
+    | ({
         relationTo: 'orders';
         value: string | Order;
       } | null)
@@ -1265,6 +1510,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'subscribers';
         value: string | Subscriber;
+      } | null)
+    | ({
+        relationTo: 'audit-logs';
+        value: string | AuditLog;
       } | null);
   globalSlug?: string | null;
   user:
@@ -1448,8 +1697,12 @@ export interface TagsSelect<T extends boolean = true> {
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  firstName?: T;
+  lastName?: T;
   role?: T;
   accountStatus?: T;
+  mustChangePassword?: T;
+  tokenVersion?: T;
   phone?: T;
   businessName?: T;
   accountType?: T;
@@ -1500,6 +1753,13 @@ export interface EventsSelect<T extends boolean = true> {
   organizer?: T;
   title?: T;
   slug?: T;
+  previousSlugs?:
+    | T
+    | {
+        slug?: T;
+        id?: T;
+      };
+  clientRequestId?: T;
   category?: T;
   heroImage?: T;
   shortDescription?: T;
@@ -1570,6 +1830,7 @@ export interface EventsSelect<T extends boolean = true> {
 export interface TicketTypesSelect<T extends boolean = true> {
   event?: T;
   name?: T;
+  ticketKind?: T;
   description?: T;
   price?: T;
   quantity?: T;
@@ -1701,8 +1962,77 @@ export interface BankVerificationsSelect<T extends boolean = true> {
   bankName?: T;
   accountNumber?: T;
   accountName?: T;
+  locked?: T;
+  verificationProvider?: T;
   status?: T;
   verifiedAt?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "bank-change-appeals_select".
+ */
+export interface BankChangeAppealsSelect<T extends boolean = true> {
+  organizer?: T;
+  currentBankName?: T;
+  currentBankCode?: T;
+  currentAccountNumber?: T;
+  currentAccountName?: T;
+  proposedBankName?: T;
+  proposedBankCode?: T;
+  proposedAccountNumber?: T;
+  proposedAccountName?: T;
+  verificationProvider?: T;
+  reason?: T;
+  status?: T;
+  submittedAt?: T;
+  reviewEligibleAt?: T;
+  reviewedBy?: T;
+  reviewedByRole?: T;
+  reviewedAt?: T;
+  reviewNote?: T;
+  overriddenBy?: T;
+  auditHistory?:
+    | T
+    | {
+        action?: T;
+        actorEmail?: T;
+        actorRole?: T;
+        note?: T;
+        at?: T;
+        id?: T;
+      };
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "free-ticket-links_select".
+ */
+export interface FreeTicketLinksSelect<T extends boolean = true> {
+  code?: T;
+  event?: T;
+  ticketType?: T;
+  organizer?: T;
+  invitationType?: T;
+  categoryLabel?: T;
+  maxClaims?: T;
+  claimedCount?: T;
+  recipientName?: T;
+  recipientEmail?: T;
+  personalMessage?: T;
+  status?: T;
+  expiresAt?: T;
+  claimedAt?: T;
+  claimedByName?: T;
+  claimedByEmail?: T;
+  ticket?: T;
+  claims?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1749,6 +2079,13 @@ export interface OrdersSelect<T extends boolean = true> {
         id?: T;
       };
   total?: T;
+  orderKind?: T;
+  purchaseMode?: T;
+  purchaserUser?: T;
+  giftRecipients?: T;
+  emailDeliveryStatus?: T;
+  emailLastError?: T;
+  emailAttempts?: T;
   status?: T;
   paidAt?: T;
   createdBy?: T;
@@ -1781,12 +2118,26 @@ export interface TransactionsSelect<T extends boolean = true> {
 export interface TicketsSelect<T extends boolean = true> {
   code?: T;
   issuanceKey?: T;
+  verificationTokenHash?: T;
+  verificationTokenCiphertext?: T;
   order?: T;
   event?: T;
   ticketType?: T;
+  ticketLabel?: T;
   attendeeName?: T;
   attendeeEmail?: T;
   attendeePhone?: T;
+  acquisitionType?: T;
+  purchaserName?: T;
+  purchaserEmail?: T;
+  purchaserUser?: T;
+  giftMessage?: T;
+  peopleCovered?: T;
+  invitationLink?: T;
+  emailDeliveryStatus?: T;
+  emailLastAttemptAt?: T;
+  emailLastError?: T;
+  emailAttempts?: T;
   source?: T;
   status?: T;
   checkedInAt?: T;
@@ -1806,6 +2157,7 @@ export interface TeamMembershipsSelect<T extends boolean = true> {
   name?: T;
   role?: T;
   permissions?: T;
+  assignedEvents?: T;
   invitationStatus?: T;
   active?: T;
   createdBy?: T;
@@ -1819,12 +2171,25 @@ export interface TeamMembershipsSelect<T extends boolean = true> {
  */
 export interface PayoutRequestsSelect<T extends boolean = true> {
   reference?: T;
+  idempotencyKey?: T;
   organizer?: T;
   event?: T;
   amount?: T;
   status?: T;
+  initiatedBy?: T;
+  initiatedByRole?: T;
   reviewedBy?: T;
   reviewNote?: T;
+  reason?: T;
+  bankName?: T;
+  bankCode?: T;
+  accountNumber?: T;
+  accountName?: T;
+  paystackRecipientCode?: T;
+  paystackTransferCode?: T;
+  paystackTransferReference?: T;
+  failureReason?: T;
+  providerPayload?: T;
   paidAt?: T;
   createdBy?: T;
   updatedBy?: T;
@@ -1842,6 +2207,11 @@ export interface RefundsSelect<T extends boolean = true> {
   amount?: T;
   reason?: T;
   status?: T;
+  initiatedBy?: T;
+  paystackRefundId?: T;
+  paystackStatus?: T;
+  failureReason?: T;
+  processedAt?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -1871,6 +2241,25 @@ export interface ComplaintsSelect<T extends boolean = true> {
 export interface SubscribersSelect<T extends boolean = true> {
   email?: T;
   status?: T;
+  createdBy?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-logs_select".
+ */
+export interface AuditLogsSelect<T extends boolean = true> {
+  action?: T;
+  category?: T;
+  actor?: T;
+  actorEmail?: T;
+  actorRole?: T;
+  targetCollection?: T;
+  targetId?: T;
+  summary?: T;
+  metadata?: T;
   createdBy?: T;
   updatedBy?: T;
   updatedAt?: T;
@@ -2022,6 +2411,8 @@ export interface CollectionQueryWidget {
       | 'announcements'
       | 'event-collections'
       | 'bank-verifications'
+      | 'bank-change-appeals'
+      | 'free-ticket-links'
       | 'orders'
       | 'transactions'
       | 'tickets'
@@ -2029,7 +2420,8 @@ export interface CollectionQueryWidget {
       | 'payout-requests'
       | 'refunds'
       | 'complaints'
-      | 'subscribers';
+      | 'subscribers'
+      | 'audit-logs';
     where?:
       | {
           [k: string]: unknown;
@@ -2065,6 +2457,8 @@ export interface ActivityWidget {
           | 'announcements'
           | 'event-collections'
           | 'bank-verifications'
+          | 'bank-change-appeals'
+          | 'free-ticket-links'
           | 'orders'
           | 'transactions'
           | 'tickets'
@@ -2073,6 +2467,7 @@ export interface ActivityWidget {
           | 'refunds'
           | 'complaints'
           | 'subscribers'
+          | 'audit-logs'
         )[]
       | null;
   };

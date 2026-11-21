@@ -1,10 +1,16 @@
 import { redirect } from 'next/navigation'
 import EventWizard from '@/components/EventWizard'
-import { getCurrentAppUser } from '@/lib/app-auth'
+import {
+  getCurrentAppUser,
+  getDashboardPathForRole,
+  isDashboardRole,
+} from '@/lib/app-auth'
 
 export default async function NewEventPage() {
   const user = await getCurrentAppUser()
-  if (!user) redirect('/login')
-  if (user.role !== 'organizer') redirect(`/dashboard/${user.role}`)
-  return <EventWizard />
+  if (!user || user.accountStatus === 'suspended') redirect('/login')
+  if (!isDashboardRole(user.role)) redirect('/')
+  if (user.mustChangePassword) redirect('/change-password')
+  if (user.role !== 'organizer') redirect(getDashboardPathForRole(user.role))
+  return <EventWizard dashboardUrl={getDashboardPathForRole(user.role)} />
 }

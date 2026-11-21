@@ -2,15 +2,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BrandLogo } from '@/components/BrandLogo'
+import { BackToDashboardButton } from '@/components/BackToDashboardButton'
+import { getPublicNavigationUser } from '@/lib/app-auth'
+import { formatDate } from '@/lib/format'
 import {
   getOrganizerProfile,
-  getOrganizerProfiles,
   getOrganizerPublishedEvents,
 } from '@/lib/organizer-profiles'
 
-export async function generateStaticParams() {
-  return (await getOrganizerProfiles()).map((profile) => ({ slug: profile.slug }))
-}
+export const dynamic = 'force-dynamic'
 
 export default async function OrganizerProfilePage({
   params,
@@ -18,21 +18,26 @@ export default async function OrganizerProfilePage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const profile = await getOrganizerProfile(slug)
+  const [profile, navUser] = await Promise.all([
+    getOrganizerProfile(slug),
+    getPublicNavigationUser(),
+  ])
   if (!profile) notFound()
   const owner = typeof profile.owner === 'object' ? profile.owner.id : profile.owner
   const events = await getOrganizerPublishedEvents(String(owner))
   const logo = typeof profile.logo === 'object' ? profile.logo : null
+  const dashboardUrl = navUser?.dashboardUrl ?? null
 
   return (
     <main className="public-organizer">
       <header className="public-organizer-nav">
-        <Link href="/">
-          <BrandLogo />
-        </Link>
-        <Link className="button button-dark" href="/discover">
-          Discover events
-        </Link>
+        <BrandLogo />
+        <div className="public-nav-actions">
+          <BackToDashboardButton dashboardUrl={dashboardUrl} className="button button-cream" />
+          <Link className="button button-dark" href="/discover">
+            Discover events
+          </Link>
+        </div>
       </header>
       <section className="public-organizer-hero">
         {logo?.url ? (
@@ -40,7 +45,7 @@ export default async function OrganizerProfilePage({
         ) : (
           <div className="organizer-monogram">{profile.displayName.slice(0, 1)}</div>
         )}
-        <span className="eyebrow">AZOR TIX organizer</span>
+        <span className="eyebrow">AZORTIX organizer</span>
         <h1>{profile.displayName}</h1>
         {profile.about && <p>{profile.about}</p>}
         <div className="organizer-socials">
@@ -66,7 +71,7 @@ export default async function OrganizerProfilePage({
                   <h3>{event.title}</h3>
                   <p>
                     {event.startsAt
-                      ? new Date(event.startsAt).toLocaleDateString('en-NG')
+                      ? formatDate(event.startsAt, (event as any).timezone)
                       : 'Date to be announced'}
                   </p>
                 </div>

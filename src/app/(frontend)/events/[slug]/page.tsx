@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import AzorSite from '@/components/AzorSite'
-import { getPublicEvent, getPublicEvents } from '@/lib/public-events'
+import { getPublicNavigationUser } from '@/lib/app-auth'
+import { getPublicEvents, resolvePublicEventBySlug } from '@/lib/public-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,11 +19,11 @@ export async function generateMetadata({
   params,
 }: PageProps<'/events/[slug]'>): Promise<Metadata> {
   const { slug } = await params
-  const event = await getPublicEvent(slug)
+  const { event } = await resolvePublicEventBySlug(slug)
   if (!event) {
     return {
-      title: 'Event not found — AZOR TIX',
-      description: 'Explore upcoming concerts, conferences, and nightlife in Abuja on AZOR TIX.',
+      title: 'Event not found — AZORTIX',
+      description: 'Explore upcoming concerts, conferences, and nightlife in Abuja on AZORTIX.',
     }
   }
 
@@ -34,14 +35,14 @@ export async function generateMetadata({
     (event.description ? event.description.slice(0, 155) : `${event.title} at ${event.location}, Abuja.`)
 
   return {
-    title: `${event.title} — AZOR TIX`,
+    title: `${event.title} — AZORTIX`,
     description: summary,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       type: 'website',
-      siteName: 'AZOR TIX',
+      siteName: 'AZORTIX',
       url: canonicalUrl,
       title: event.title,
       description: summary,
@@ -65,10 +66,16 @@ export async function generateMetadata({
 
 export default async function EventPage({ params }: PageProps<'/events/[slug]'>) {
   const { slug } = await params
-  const event = await getPublicEvent(slug)
+  const { event, redirectSlug } = await resolvePublicEventBySlug(slug)
+  if (redirectSlug) {
+    permanentRedirect(`/events/${redirectSlug}`)
+  }
   if (!event) notFound()
-  const events = await getPublicEvents()
-  const origin = await resolveOrigin()
+  const [events, origin, currentUser] = await Promise.all([
+    getPublicEvents(),
+    resolveOrigin(),
+    getPublicNavigationUser(),
+  ])
   const allEvents = events.some((item) => item.id === event.id) ? events : [event, ...events]
   const imageUrl = event.image.startsWith('http') ? event.image : `${origin}${event.image}`
 
@@ -111,7 +118,7 @@ export default async function EventPage({ params }: PageProps<'/events/[slug]'>)
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <AzorSite events={allEvents} initialPath={`/events/${slug}`} />
+      <AzorSite events={allEvents} initialPath={`/events/${slug}`} currentUser={currentUser} />
     </>
   )
 }

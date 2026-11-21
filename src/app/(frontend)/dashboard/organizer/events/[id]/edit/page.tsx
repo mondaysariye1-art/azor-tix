@@ -1,12 +1,18 @@
 import { notFound, redirect } from 'next/navigation'
 import EventWizard from '@/components/EventWizard'
-import { getCurrentAppUser } from '@/lib/app-auth'
+import {
+  getCurrentAppUser,
+  getDashboardPathForRole,
+  isDashboardRole,
+} from '@/lib/app-auth'
 import { getPayloadClient } from '@/lib/payload'
 
 export default async function EditEventPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentAppUser()
-  if (!user) redirect('/login')
-  if (user.role !== 'organizer') redirect(`/dashboard/${user.role}`)
+  if (!user || user.accountStatus === 'suspended') redirect('/login')
+  if (!isDashboardRole(user.role)) redirect('/')
+  if (user.mustChangePassword) redirect('/change-password')
+  if (user.role !== 'organizer') redirect(getDashboardPathForRole(user.role))
   const { id } = await params
   const payload = await getPayloadClient()
   let event
@@ -32,6 +38,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
   })
   return (
     <EventWizard
+      dashboardUrl={`/dashboard/${user.role}`}
       initialEvent={JSON.parse(JSON.stringify(event))}
       initialTickets={JSON.parse(JSON.stringify(tickets.docs))}
     />
